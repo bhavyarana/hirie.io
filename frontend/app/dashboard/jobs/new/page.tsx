@@ -2,15 +2,16 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDropzone } from 'react-dropzone';
-import { jobsApi, parseJdFile, type CreateJobData, type ParsedJD } from '@/lib/api';
+import { jobsApi, teamsApi, parseJdFile, type CreateJobData, type ParsedJD } from '@/lib/api';
+import { useUserContext } from '@/lib/context/UserContext';
 import { toast } from 'sonner';
 import Link from 'next/link';
 
 export default function NewJobPage() {
   const [form, setForm] = useState<CreateJobData>({
-    job_title: '', company_name: '', job_description_text: '', required_skills: [],
+    job_title: '', company_name: '', job_description_text: '', required_skills: [], assigned_team_id: null,
   });
   const [skillInput, setSkillInput] = useState('');
   const [isParsing, setIsParsing] = useState(false);
@@ -18,6 +19,16 @@ export default function NewJobPage() {
   const [aiWarning, setAiWarning] = useState<string | null>(null);
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { role } = useUserContext();
+
+  const canAssignTeam = role === 'admin' || role === 'manager';
+
+  const { data: teamsData } = useQuery({
+    queryKey: ['teams'],
+    queryFn: () => teamsApi.list(),
+    enabled: canAssignTeam,
+  });
+  const teams = teamsData?.teams ?? [];
 
   const createMutation = useMutation({
     mutationFn: jobsApi.create,

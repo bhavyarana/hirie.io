@@ -11,6 +11,9 @@ const resumesRouter = require('./routes/resumes');
 const analyticsRouter = require('./routes/analytics');
 const exportRouter = require('./routes/export');
 const parseJdRouter = require('./routes/parseJd');
+const usersRouter = require('./routes/users');
+const teamsRouter = require('./routes/teams');
+const notificationsRouter = require('./routes/notifications');
 const logger = require('./config/logger');
 
 // Start BullMQ worker in the same process as the API server
@@ -44,12 +47,17 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Routes
+// Routes (existing)
 app.use('/api/jobs', jobsRouter);
 app.use('/api', resumesRouter);
 app.use('/api', analyticsRouter);
 app.use('/api', exportRouter);
 app.use('/api', parseJdRouter);
+
+// Routes (new RBAC)
+app.use('/api/users', usersRouter);
+app.use('/api/teams', teamsRouter);
+app.use('/api/notifications', notificationsRouter);
 
 // 404 handler
 app.use((req, res) => {

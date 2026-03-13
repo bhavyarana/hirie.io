@@ -2,98 +2,209 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../config/supabase');
 const authMiddleware = require('../middleware/auth');
+const requireRole = require('../middleware/requireRole');
+const { logActivity } = require('../services/activityLogger');
 const logger = require('../config/logger');
 
 // All job routes require authentication
 router.use(authMiddleware);
 
-// POST /api/jobs - Create a new job
-router.post('/', async (req, res) => {
-  const { job_title, company_name, job_description_text, required_skills } = req.body;
+/**
+ * Build role-scoped query for the jobs table.
+ * Returns a Supabase query scoped to what the user can see.
+ */
+async function buildJobsQuery(user) {
+  const { role, id: userId } = user;
+
+  let query = supabase
+    .from('jobs')
+    .select('*, candidates(count), team:teams(id, name), creator:users!jobs_created_by_fkey(id, name, email)')
+    .order('created_at', { ascending: false });
+
+  if (role === 'admin') {
+    // Admin sees all
+    return query;
+  }
+
+  if (role === 'manager') {
+    // Manager sees jobs they created or jobs in their teams
+    const { data: managerTeams } = await supabase
+      .from('teams').select('id').eq('manager_id', userId);
+    const teamIds = (managerTeams || []).map(t => t.id);
+    if (teamIds.length > 0) {
+      return query.or(`created_by.eq.${userId},assigned_team_id.in.(${teamIds.join(',')})`);
+    }
+    return query.eq('created_by', userId);
+  }
+
+  if (role === 'tl') {
+    // TL sees jobs in their team
+    const { data: tlTeams } = await supabase
+      .from('teams').select('id').eq('tl_id', userId);
+    const teamIds = (tlTeams || []).map(t => t.id);
+    if (teamIds.length === 0) return query.eq('id', '00000000-0000-0000-0000-000000000000'); // return empty
+    return query.in('assigned_team_id', teamIds);
+  }
+
+  // Recruiter: jobs in the teams they belong to
+  const { data: memberships } = await supabase
+    .from('team_members').select('team_id').eq('user_id', userId);
+  const teamIds = (memberships || []).map(m => m.team_id);
+  if (teamIds.length === 0) return query.eq('id', '00000000-0000-0000-0000-000000000000');
+  return query.in('assigned_team_id', teamIds);
+}
+
+// POST /api/jobs - Create a new job (admin, manager only)
+router.post('/', requireRole('admin', 'manager'), async (req, res) => {
+  const { job_title, company_name, job_description_text, required_skills, assigned_team_id } = req.body;
 
   if (!job_title || !company_name || !job_description_text) {
     return res.status(400).json({ error: 'job_title, company_name, and job_description_text are required' });
   }
 
+  // Validate team access for manager
+  if (req.user.role === 'manager' && assigned_team_id) {
+    const { data: team } = await supabase
+      .from('teams').select('id').eq('id', assigned_team_id).eq('manager_id', req.user.id).single();
+    if (!team) {
+      return res.status(403).json({ error: 'You do not manage the specified team' });
+    }
+  }
+
   const { data, error } = await supabase
     .from('jobs')
     .insert({
-      recruiter_id: req.user.id,
+      created_by: req.user.id,
       job_title,
       company_name,
       job_description_text,
       required_skills: required_skills || [],
+      assigned_team_id: assigned_team_id || null,
     })
     .select()
     .single();
 
   if (error) {
     logger.error('Error creating job:', error);
-    // Return real Supabase error — if you see "relation jobs does not exist",
-    // run the SQL migration in supabase/migrations/00_initial_schema.sql first.
     return res.status(500).json({
       error: error.message || 'Failed to create job',
       hint: error.hint || null,
     });
   }
 
-  logger.info(`Job created: ${data.id} by recruiter ${req.user.id}`);
+  // Notify TL of assigned team
+  if (assigned_team_id) {
+    const { data: team } = await supabase.from('teams').select('tl_id, name').eq('id', assigned_team_id).single();
+    if (team?.tl_id) {
+      await logActivity(
+        req.user.id, 'job_created', 'job', data.id,
+        { job_title, team_id: assigned_team_id },
+        [team.tl_id],
+        'New job assigned to your team',
+        `Job "${job_title}" has been assigned to team "${team.name}".`
+      );
+    }
+  } else {
+    await logActivity(req.user.id, 'job_created', 'job', data.id, { job_title });
+  }
+
+  logger.info(`Job created: ${data.id} by ${req.user.id}`);
   res.status(201).json({ job: data });
 });
 
-// GET /api/jobs - List all jobs for the authenticated recruiter
+// GET /api/jobs - List jobs (role-scoped)
 router.get('/', async (req, res) => {
-  const { data, error } = await supabase
-    .from('jobs')
-    .select('*, candidates(count)')
-    .eq('recruiter_id', req.user.id)
-    .order('created_at', { ascending: false });
+  try {
+    const query = await buildJobsQuery(req.user);
+    const { data, error } = await query;
 
-  if (error) {
-    logger.error('Error fetching jobs:', error);
-    return res.status(500).json({ error: error.message || 'Failed to fetch jobs' });
+    if (error) {
+      logger.error('Error fetching jobs:', error);
+      return res.status(500).json({ error: error.message || 'Failed to fetch jobs' });
+    }
+
+    const jobs = (data || []).map(job => ({
+      ...job,
+      candidate_count: job.candidates?.[0]?.count || 0,
+      candidates: undefined,
+    }));
+
+    res.json({ jobs });
+  } catch (err) {
+    logger.error('Error in jobs GET:', err);
+    res.status(500).json({ error: 'Failed to fetch jobs' });
   }
-
-  const jobs = data.map(job => ({
-    ...job,
-    candidate_count: job.candidates?.[0]?.count || 0,
-    candidates: undefined,
-  }));
-
-  res.json({ jobs });
 });
 
-// GET /api/jobs/:id - Get single job
+// GET /api/jobs/:id - Get single job (role-scoped)
 router.get('/:id', async (req, res) => {
   const { data, error } = await supabase
     .from('jobs')
-    .select('*')
+    .select(`
+      *,
+      team:teams(id, name, manager_id, tl_id,
+        manager:users!teams_manager_id_fkey(id, name, email),
+        tl:users!teams_tl_id_fkey(id, name, email)
+      ),
+      creator:users!jobs_created_by_fkey(id, name, email)
+    `)
     .eq('id', req.params.id)
-    .eq('recruiter_id', req.user.id)
     .single();
 
   if (error || !data) {
     return res.status(404).json({ error: 'Job not found' });
   }
 
-  res.json({ job: data });
+  // Check role-based access
+  const { role, id: userId } = req.user;
+  if (role === 'manager') {
+    const teamManagerId = data.team?.manager_id;
+    if (data.created_by !== userId && teamManagerId !== userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+  } else if (role === 'tl') {
+    const { data: tlTeam } = await supabase.from('teams').select('id').eq('id', data.assigned_team_id).eq('tl_id', userId).single();
+    if (!tlTeam) return res.status(403).json({ error: 'Access denied' });
+  } else if (role === 'recruiter') {
+    const { data: mem } = await supabase.from('team_members').select('id').eq('team_id', data.assigned_team_id).eq('user_id', userId).single();
+    if (!mem) return res.status(403).json({ error: 'Access denied' });
+  }
+
+  // Recruiter performance for this job
+  const { data: recruiterStats } = await supabase
+    .from('candidates')
+    .select('recruiter_id, users!candidates_recruiter_id_fkey(name, email)')
+    .eq('job_id', req.params.id);
+
+  const recruiterMap = {};
+  (recruiterStats || []).forEach(c => {
+    const rid = c.recruiter_id;
+    if (!recruiterMap[rid]) {
+      recruiterMap[rid] = { recruiter_id: rid, name: c.users?.name || c.users?.email || rid, count: 0 };
+    }
+    recruiterMap[rid].count++;
+  });
+
+  res.json({ job: { ...data, recruiter_performance: Object.values(recruiterMap) } });
 });
 
-// PATCH /api/jobs/:id - Update a job
-router.patch('/:id', async (req, res) => {
-  const allowedFields = ['job_title', 'company_name', 'job_description_text', 'required_skills', 'status'];
+// PATCH /api/jobs/:id - Update a job (admin, manager)
+router.patch('/:id', requireRole('admin', 'manager'), async (req, res) => {
+  const allowedFields = ['job_title', 'company_name', 'job_description_text', 'required_skills', 'status', 'assigned_team_id'];
   const updates = {};
   allowedFields.forEach(field => {
     if (req.body[field] !== undefined) updates[field] = req.body[field];
   });
 
-  const { data, error } = await supabase
-    .from('jobs')
-    .update(updates)
-    .eq('id', req.params.id)
-    .eq('recruiter_id', req.user.id)
-    .select()
-    .single();
+  // Scope update to jobs the manager owns or manages
+  let query = supabase.from('jobs').update(updates).eq('id', req.params.id);
+  if (req.user.role === 'manager') {
+    const { data: managerTeams } = await supabase.from('teams').select('id').eq('manager_id', req.user.id);
+    const teamIds = (managerTeams || []).map(t => t.id);
+    // Will let RLS policy handle rejection
+  }
+
+  const { data, error } = await query.select().single();
 
   if (error || !data) {
     return res.status(404).json({ error: 'Job not found or update failed' });
@@ -102,19 +213,51 @@ router.patch('/:id', async (req, res) => {
   res.json({ job: data });
 });
 
-// DELETE /api/jobs/:id - Delete a job
-router.delete('/:id', async (req, res) => {
+// DELETE /api/jobs/:id - Delete a job (admin, manager)
+router.delete('/:id', requireRole('admin', 'manager'), async (req, res) => {
   const { error } = await supabase
     .from('jobs')
     .delete()
-    .eq('id', req.params.id)
-    .eq('recruiter_id', req.user.id);
+    .eq('id', req.params.id);
 
   if (error) {
     return res.status(500).json({ error: 'Failed to delete job' });
   }
 
   res.json({ message: 'Job deleted successfully' });
+});
+
+// GET /api/jobs/overview - admin/manager summary
+router.get('/analytics/overview', requireRole('admin', 'manager'), async (req, res) => {
+  const { id: userId, role } = req.user;
+
+  let jobsQ = supabase.from('jobs').select('id, status', { count: 'exact' });
+  if (role === 'manager') {
+    const { data: teams } = await supabase.from('teams').select('id').eq('manager_id', userId);
+    const tids = (teams || []).map(t => t.id);
+    if (tids.length > 0) jobsQ = jobsQ.or(`created_by.eq.${userId},assigned_team_id.in.(${tids.join(',')})`);
+    else jobsQ = jobsQ.eq('created_by', userId);
+  }
+
+  const { data: jobs, count: jobCount } = await jobsQ;
+  const activeJobs = (jobs || []).filter(j => j.status === 'active').length;
+
+  const { count: candidateCount } = await supabase
+    .from('candidates').select('id', { count: 'exact', head: true });
+
+  const { count: userCount } = await supabase
+    .from('users').select('id', { count: 'exact', head: true });
+
+  const { count: teamCount } = await supabase
+    .from('teams').select('id', { count: 'exact', head: true });
+
+  res.json({
+    total_jobs: jobCount || 0,
+    active_jobs: activeJobs || 0,
+    total_candidates: candidateCount || 0,
+    total_users: userCount || 0,
+    total_teams: teamCount || 0,
+  });
 });
 
 module.exports = router;

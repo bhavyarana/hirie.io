@@ -26,25 +26,63 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 
-// Jobs
+// ─── Users ─────────────────────────────────────────────────────────────────
+export const usersApi = {
+  me: () => apiFetch<{ user: UserRecord }>('/api/users/me'),
+  list: () => apiFetch<{ users: UserRecord[] }>('/api/users'),
+  create: (data: { email: string; name?: string; role: string }) =>
+    apiFetch<{ message: string; userId: string }>('/api/users', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: Partial<{ name: string; role: string }>) =>
+    apiFetch<{ user: UserRecord }>(`/api/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  delete: (id: string) => apiFetch(`/api/users/${id}`, { method: 'DELETE' }),
+};
+
+// ─── Teams ─────────────────────────────────────────────────────────────────
+export const teamsApi = {
+  list: () => apiFetch<{ teams: Team[] }>('/api/teams'),
+  get: (id: string) => apiFetch<{ team: TeamDetail }>(`/api/teams/${id}`),
+  create: (data: CreateTeamData) =>
+    apiFetch<{ team: Team }>('/api/teams', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: Partial<CreateTeamData>) =>
+    apiFetch<{ team: Team }>(`/api/teams/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  delete: (id: string) => apiFetch(`/api/teams/${id}`, { method: 'DELETE' }),
+  addMember: (teamId: string, data: { user_id: string; role_in_team?: string }) =>
+    apiFetch<{ member: TeamMember }>(`/api/teams/${teamId}/members`, { method: 'POST', body: JSON.stringify(data) }),
+  removeMember: (teamId: string, userId: string) =>
+    apiFetch(`/api/teams/${teamId}/members/${userId}`, { method: 'DELETE' }),
+  getJobs: (teamId: string) => apiFetch<{ jobs: Job[] }>(`/api/teams/${teamId}/jobs`),
+  getAnalytics: (teamId: string) => apiFetch<TeamAnalytics>(`/api/teams/${teamId}/analytics`),
+};
+
+// ─── Notifications ──────────────────────────────────────────────────────────
+export const notificationsApi = {
+  list: () => apiFetch<{ notifications: Notification[]; unread_count: number }>('/api/notifications'),
+  markRead: (id: string) => apiFetch(`/api/notifications/${id}/read`, { method: 'PATCH' }),
+  markAllRead: () => apiFetch('/api/notifications/read-all', { method: 'POST' }),
+};
+
+// ─── Jobs ───────────────────────────────────────────────────────────────────
 export const jobsApi = {
   list: () => apiFetch<{ jobs: Job[] }>('/api/jobs'),
-  get: (id: string) => apiFetch<{ job: Job }>(`/api/jobs/${id}`),
+  get: (id: string) => apiFetch<{ job: JobDetail }>(`/api/jobs/${id}`),
   create: (data: CreateJobData) => apiFetch<{ job: Job }>('/api/jobs', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: string, data: Partial<CreateJobData>) => apiFetch<{ job: Job }>(`/api/jobs/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   delete: (id: string) => apiFetch(`/api/jobs/${id}`, { method: 'DELETE' }),
+  overview: () => apiFetch<JobsOverview>('/api/jobs/analytics/overview'),
 };
 
-// Candidates
+// ─── Candidates ─────────────────────────────────────────────────────────────
 export const candidatesApi = {
   list: (jobId: string, params?: { status?: string }) => {
     const q = params?.status ? `?status=${params.status}` : '';
     return apiFetch<{ candidates: Candidate[] }>(`/api/jobs/${jobId}/candidates${q}`);
   },
   get: (id: string) => apiFetch<{ candidate: CandidateDetail }>(`/api/candidates/${id}`),
+  updateStatus: (id: string, status: string) =>
+    apiFetch<{ candidate: Candidate }>(`/api/candidates/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 };
 
-// Resume upload
+// ─── Resume upload ─────────────────────────────────────────────────────────
 export async function uploadResumes(jobId: string, files: File[], onProgress?: (pct: number) => void) {
   const supabase = createClient();
   const { data: { session } } = await supabase.auth.getSession();
@@ -74,12 +112,12 @@ export async function uploadResumes(jobId: string, files: File[], onProgress?: (
   });
 }
 
-// Analytics
+// ─── Analytics ──────────────────────────────────────────────────────────────
 export const analyticsApi = {
   get: (jobId: string) => apiFetch<AnalyticsData>(`/api/jobs/${jobId}/analytics`),
 };
 
-// Parse JD from PDF/DOCX file using AI
+// ─── Parse JD ───────────────────────────────────────────────────────────────
 export async function parseJdFile(file: File): Promise<ParsedJD> {
   const supabase = createClient();
   const { data: { session } } = await supabase.auth.getSession();
@@ -101,8 +139,7 @@ export async function parseJdFile(file: File): Promise<ParsedJD> {
   return res.json();
 }
 
-
-// Export CSV
+// ─── Export CSV ─────────────────────────────────────────────────────────────
 export async function exportCSV(jobId: string, jobTitle: string) {
   const supabase = createClient();
   const { data: { session } } = await supabase.auth.getSession();
@@ -121,7 +158,57 @@ export async function exportCSV(jobId: string, jobTitle: string) {
   URL.revokeObjectURL(url);
 }
 
-// Types
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+export interface UserRecord {
+  id: string;
+  email: string;
+  name: string | null;
+  role: 'admin' | 'manager' | 'tl' | 'recruiter';
+  created_at: string;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  manager_id: string | null;
+  tl_id: string | null;
+  member_count?: number;
+  manager?: { id: string; name: string | null; email: string };
+  tl?: { id: string; name: string | null; email: string };
+  created_at: string;
+}
+
+export interface TeamMember {
+  id: string;
+  team_id: string;
+  user_id: string;
+  role_in_team: 'tl' | 'recruiter';
+  user?: UserRecord;
+  created_at: string;
+}
+
+export interface TeamDetail extends Team {
+  members: TeamMember[];
+  job_count: number;
+}
+
+export interface CreateTeamData {
+  name: string;
+  manager_id?: string;
+  tl_id?: string;
+}
+
+export interface TeamAnalytics {
+  total_jobs: number;
+  total_candidates: number;
+  average_score: number;
+  pass_count: number;
+  review_count: number;
+  fail_count: number;
+  recruiter_performance: { recruiter_id: string; count: number }[];
+}
+
 export interface Job {
   id: string;
   job_title: string;
@@ -129,8 +216,21 @@ export interface Job {
   job_description_text: string;
   required_skills: string[];
   status: 'active' | 'closed' | 'draft';
+  created_by?: string;
+  assigned_team_id?: string | null;
   candidate_count?: number;
+  team?: { id: string; name: string } | null;
+  creator?: { id: string; name: string | null; email: string } | null;
   created_at: string;
+}
+
+export interface JobDetail extends Job {
+  team: {
+    id: string; name: string; manager_id: string | null; tl_id: string | null;
+    manager?: { id: string; name: string | null; email: string } | null;
+    tl?: { id: string; name: string | null; email: string } | null;
+  } | null;
+  recruiter_performance: { recruiter_id: string; name: string; count: number }[];
 }
 
 export interface CreateJobData {
@@ -138,15 +238,28 @@ export interface CreateJobData {
   company_name: string;
   job_description_text: string;
   required_skills?: string[];
+  assigned_team_id?: string | null;
+}
+
+export interface JobsOverview {
+  total_jobs: number;
+  active_jobs: number;
+  total_candidates: number;
+  total_users: number;
+  total_teams: number;
 }
 
 export interface Candidate {
   id: string;
+  job_id: string;
+  recruiter_id: string;
   name: string | null;
   email: string | null;
   phone: string | null;
   resume_file_name: string;
+  resume_hash?: string | null;
   processing_status: 'pending' | 'processing' | 'completed' | 'failed';
+  status: 'uploaded' | 'scored' | 'shortlisted' | 'interview' | 'rejected';
   error_message: string | null;
   score: number | null;
   score_status: 'pass' | 'review' | 'fail' | null;
@@ -157,6 +270,7 @@ export interface Candidate {
   experience_match: number | null;
   education_match: number | null;
   summary: string | null;
+  recruiter_name?: string | null;
   created_at: string;
 }
 
@@ -202,3 +316,13 @@ export interface ParsedJD {
   required_skills: string[];
 }
 
+export interface Notification {
+  id: string;
+  user_id: string;
+  title: string;
+  message: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  is_read: boolean;
+  created_at: string;
+}

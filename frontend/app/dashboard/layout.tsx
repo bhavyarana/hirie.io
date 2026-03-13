@@ -5,16 +5,56 @@ import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { NotificationBell } from '@/components/NotificationBell';
+import { useUserContext } from '@/lib/context/UserContext';
 
-const navItems = [
-  { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
-  { href: '/dashboard/jobs', icon: '💼', label: 'Jobs' },
-];
+const ROLE_NAV: Record<string, { href: string; icon: string; label: string }[]> = {
+  admin: [
+    { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
+    { href: '/dashboard/users', icon: '👤', label: 'Users' },
+    { href: '/dashboard/teams', icon: '🏢', label: 'Teams' },
+    { href: '/dashboard/jobs', icon: '💼', label: 'Jobs' },
+    { href: '/dashboard/analytics', icon: '📊', label: 'Analytics' },
+  ],
+  manager: [
+    { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
+    { href: '/dashboard/teams', icon: '🏢', label: 'Teams' },
+    { href: '/dashboard/jobs', icon: '💼', label: 'Jobs' },
+    { href: '/dashboard/analytics', icon: '📊', label: 'Analytics' },
+  ],
+  tl: [
+    { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
+    { href: '/dashboard/jobs', icon: '💼', label: 'Team Jobs' },
+    { href: '/dashboard/candidates', icon: '👥', label: 'Candidates' },
+  ],
+  recruiter: [
+    { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
+    { href: '/dashboard/jobs', icon: '💼', label: 'Assigned Jobs' },
+    { href: '/dashboard/candidates', icon: '👥', label: 'My Candidates' },
+  ],
+};
+
+const ROLE_COLORS: Record<string, string> = {
+  admin: '#f59e0b',
+  manager: '#6366f1',
+  tl: '#22c55e',
+  recruiter: '#38bdf8',
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: 'Admin',
+  manager: 'Manager',
+  tl: 'Team Leader',
+  recruiter: 'Recruiter',
+};
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
+  const { user, role, loading } = useUserContext();
+
+  const navItems = ROLE_NAV[role] ?? ROLE_NAV.recruiter;
 
   async function handleSignOut() {
     await supabase.auth.signOut();
@@ -62,8 +102,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           })}
         </nav>
 
-        {/* Bottom: Theme toggle + Sign out */}
+        {/* Bottom: User info + Theme + Sign out */}
         <div style={{ padding: '0 0.75rem', borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {/* User info */}
+          {!loading && user && (
+            <div style={{
+              padding: '0.625rem 0.75rem', borderRadius: '0.5rem',
+              background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)',
+              marginBottom: '0.25rem',
+            }}>
+              <p style={{ color: 'var(--text-primary)', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.2rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user.name || user.email}
+              </p>
+              <span style={{
+                fontSize: '0.65rem', fontWeight: 700, padding: '0.1rem 0.4rem',
+                borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.05em',
+                background: `${ROLE_COLORS[role] || '#6366f1'}22`,
+                color: ROLE_COLORS[role] || '#6366f1',
+                border: `1px solid ${ROLE_COLORS[role] || '#6366f1'}40`,
+              }}>
+                {ROLE_LABELS[role] || role}
+              </span>
+            </div>
+          )}
+
           {/* Theme toggle */}
           <div style={{ padding: '0 0.25rem' }}>
             <ThemeToggle />
@@ -85,6 +147,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Main content */}
       <main style={{ marginLeft: '240px', flex: 1, overflowX: 'hidden' }}>
+        {/* Top bar */}
+        <div style={{
+          position: 'sticky', top: 0, zIndex: 30,
+          background: 'rgba(var(--bg-base-rgb, 10,15,30), 0.85)', backdropFilter: 'blur(12px)',
+          borderBottom: '1px solid var(--border)',
+          padding: '0.75rem 2rem',
+          display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.75rem',
+        }}>
+          <NotificationBell />
+        </div>
         {children}
       </main>
     </div>
