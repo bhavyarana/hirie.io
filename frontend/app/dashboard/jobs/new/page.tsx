@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDropzone } from 'react-dropzone';
@@ -13,6 +13,7 @@ export default function NewJobPage() {
   const [form, setForm] = useState<CreateJobData>({
     job_title: '', company_name: '', job_description_text: '', required_skills: [], assigned_team_id: null,
   });
+  const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
   const [skillInput, setSkillInput] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const [showPdfUpload, setShowPdfUpload] = useState(false);
@@ -20,6 +21,13 @@ export default function NewJobPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { role } = useUserContext();
+
+  // Only Admin and Manager can create jobs
+  useEffect(() => {
+    if (role && role !== 'admin' && role !== 'manager') {
+      router.replace('/dashboard/jobs');
+    }
+  }, [role, router]);
 
   const canAssignTeam = role === 'admin' || role === 'manager';
 
@@ -31,7 +39,14 @@ export default function NewJobPage() {
   const teams = teamsData?.teams ?? [];
 
   const createMutation = useMutation({
-    mutationFn: jobsApi.create,
+    mutationFn: async (data: CreateJobData) => {
+      const res = await jobsApi.create(data);
+      // Set multi-team assignments after job created
+      if (selectedTeamIds.size > 0) {
+        await jobsApi.setTeams(res.job.id, Array.from(selectedTeamIds));
+      }
+      return res;
+    },
     onSuccess: (data) => {
       toast.success('Job created successfully!');
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
@@ -85,6 +100,14 @@ export default function NewJobPage() {
     disabled: isParsing,
   });
 
+  function toggleTeam(id: string) {
+    setSelectedTeamIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
   function addSkill() {
     const skill = skillInput.trim();
     if (!skill) return;
@@ -103,7 +126,9 @@ export default function NewJobPage() {
       toast.error('Please fill all required fields (Job Title, Company Name, Job Description)');
       return;
     }
-    createMutation.mutate(form);
+    // Pass first selected team as assigned_team_id for legacy compat
+    const firstTeam = selectedTeamIds.size > 0 ? Array.from(selectedTeamIds)[0] : null;
+    createMutation.mutate({ ...form, assigned_team_id: firstTeam });
   };
 
   const inputStyle: React.CSSProperties = {
@@ -242,6 +267,33 @@ export default function NewJobPage() {
           <h2 style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: '1.25rem', fontSize: '1rem' }}>
             Job Details
           </h2>
+
+          {/* Team multi-select */}
+          {canAssignTeam && teams.length > 0 && (
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ ...labelStyle, marginBottom: '0.5rem' }}>Assign to Teams</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '200px', overflowY: 'auto', background: 'var(--bg-base)', borderRadius: '0.5rem', padding: '0.625rem', border: '1px solid var(--border)' }}>
+                {teams.map(team => (
+                  <label key={team.id} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', padding: '0.35rem 0.5rem', borderRadius: '0.375rem', background: selectedTeamIds.has(team.id) ? 'rgba(99,102,241,0.12)' : 'transparent' }}>
+                    <input type="checkbox" checked={selectedTeamIds.has(team.id)} onChange={() => toggleTeam(team.id)}
+                      style={{ accentColor: '#6366f1', width: '15px', height: '15px' }} />
+                    <span style={{ color: 'var(--text-primary)', fontSize: '0.85rem' }}>{team.name}</span>
+                  </label>
+                ))}
+              </div>
+              {/* Selected team tags */}
+              {selectedTeamIds.size > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', marginTop: '0.5rem' }}>
+                  {teams.filter(t => selectedTeamIds.has(t.id)).map(t => (
+                    <span key={t.id} style={{ padding: '0.2rem 0.5rem', borderRadius: '4px', background: 'rgba(99,102,241,0.15)', color: '#a5b4fc', fontSize: '0.75rem', border: '1px solid rgba(99,102,241,0.3)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      {t.name}
+                      <button type="button" onClick={() => toggleTeam(t.id)} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', padding: 0, lineHeight: 1 }}>×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
             <div>

@@ -30,11 +30,13 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 export const usersApi = {
   me: () => apiFetch<{ user: UserRecord }>('/api/users/me'),
   list: () => apiFetch<{ users: UserRecord[] }>('/api/users'),
-  create: (data: { email: string; name?: string; role: string }) =>
+  create: (data: { email: string; name?: string; role: string; password: string }) =>
     apiFetch<{ message: string; userId: string }>('/api/users', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: string, data: Partial<{ name: string; role: string }>) =>
     apiFetch<{ user: UserRecord }>(`/api/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   delete: (id: string) => apiFetch(`/api/users/${id}`, { method: 'DELETE' }),
+  resetPassword: (id: string, password: string) =>
+    apiFetch<{ message: string }>(`/api/users/${id}/reset-password`, { method: 'POST', body: JSON.stringify({ password }) }),
 };
 
 // ─── Teams ─────────────────────────────────────────────────────────────────
@@ -69,6 +71,24 @@ export const jobsApi = {
   update: (id: string, data: Partial<CreateJobData>) => apiFetch<{ job: Job }>(`/api/jobs/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   delete: (id: string) => apiFetch(`/api/jobs/${id}`, { method: 'DELETE' }),
   overview: () => apiFetch<JobsOverview>('/api/jobs/analytics/overview'),
+  setTeams: (jobId: string, teamIds: string[]) =>
+    apiFetch<{ teams: { id: string; name: string }[] }>(`/api/jobs/${jobId}/teams`, { method: 'POST', body: JSON.stringify({ team_ids: teamIds }) }),
+  getTeams: (jobId: string) =>
+    apiFetch<{ teams: { id: string; name: string }[] }>(`/api/jobs/${jobId}/teams`),
+};
+
+// ─── Job Assignments (TL assigns jobs to recruiters) ────────────────────────
+export const jobAssignmentsApi = {
+  list: (recruiterId?: string) => {
+    const q = recruiterId ? `?recruiter_id=${recruiterId}` : '';
+    return apiFetch<{ assignments: JobAssignment[] }>(`/api/job-assignments${q}`);
+  },
+  assign: (jobId: string, recruiterId: string) =>
+    apiFetch<{ assignment: JobAssignment }>('/api/job-assignments', { method: 'POST', body: JSON.stringify({ job_id: jobId, recruiter_id: recruiterId }) }),
+  remove: (jobId: string, recruiterId: string) =>
+    apiFetch('/api/job-assignments', { method: 'DELETE', body: JSON.stringify({ job_id: jobId, recruiter_id: recruiterId }) }),
+  bulkAssign: (recruiterId: string, jobIds: string[]) =>
+    apiFetch<{ assignments: JobAssignment[] }>('/api/job-assignments/bulk', { method: 'POST', body: JSON.stringify({ recruiter_id: recruiterId, job_ids: jobIds }) }),
 };
 
 // ─── Candidates ─────────────────────────────────────────────────────────────
@@ -219,9 +239,19 @@ export interface Job {
   created_by?: string;
   assigned_team_id?: string | null;
   candidate_count?: number;
+  teams?: { id: string; name: string }[];
   team?: { id: string; name: string } | null;
   creator?: { id: string; name: string | null; email: string } | null;
   created_at: string;
+}
+
+export interface JobAssignment {
+  job_id: string;
+  recruiter_id: string;
+  assigned_by?: string;
+  assigned_at: string;
+  job?: { id: string; job_title: string; company_name: string; status: string };
+  recruiter?: { id: string; name: string | null; email: string };
 }
 
 export interface JobDetail extends Job {
@@ -239,6 +269,7 @@ export interface CreateJobData {
   job_description_text: string;
   required_skills?: string[];
   assigned_team_id?: string | null;
+  status?: 'active' | 'closed' | 'draft';
 }
 
 export interface JobsOverview {

@@ -528,3 +528,23 @@ CREATE POLICY "Service role can manage all resumes"
 --   WHERE email = 'your@email.com'
 --   ON CONFLICT (id) DO UPDATE SET role = 'admin';
 -- ============================================================
+
+-- ============================================================
+-- STEP 8: Many-to-many junction tables
+-- ============================================================
+
+-- Many jobs → many teams
+CREATE TABLE IF NOT EXISTS public.job_teams (
+  job_id  UUID NOT NULL REFERENCES public.jobs(id) ON DELETE CASCADE,
+  team_id UUID NOT NULL REFERENCES public.teams(id) ON DELETE CASCADE,
+  PRIMARY KEY (job_id, team_id)
+);
+
+-- TL / admin / manager assigns a job to a recruiter
+CREATE TABLE IF NOT EXISTS public.job_recruiter_assignments (
+  job_id        UUID NOT NULL REFERENCES public.jobs(id) ON DELETE CASCADE,
+  recruiter_id  UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  assigned_by   UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  assigned_at   TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (job_id, recruiter_id)
+);

@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -7,6 +8,7 @@ import { toast } from 'sonner';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { NotificationBell } from '@/components/NotificationBell';
 import { useUserContext } from '@/lib/context/UserContext';
+import { useQueryClient } from '@tanstack/react-query';
 
 const ROLE_NAV: Record<string, { href: string; icon: string; label: string }[]> = {
   admin: [
@@ -15,22 +17,26 @@ const ROLE_NAV: Record<string, { href: string; icon: string; label: string }[]> 
     { href: '/dashboard/teams', icon: '🏢', label: 'Teams' },
     { href: '/dashboard/jobs', icon: '💼', label: 'Jobs' },
     { href: '/dashboard/analytics', icon: '📊', label: 'Analytics' },
+    { href: '/dashboard/settings', icon: '⚙️', label: 'Settings' },
   ],
   manager: [
     { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
     { href: '/dashboard/teams', icon: '🏢', label: 'Teams' },
     { href: '/dashboard/jobs', icon: '💼', label: 'Jobs' },
     { href: '/dashboard/analytics', icon: '📊', label: 'Analytics' },
+    { href: '/dashboard/settings', icon: '⚙️', label: 'Settings' },
   ],
   tl: [
     { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
-    { href: '/dashboard/jobs', icon: '💼', label: 'Team Jobs' },
-    { href: '/dashboard/candidates', icon: '👥', label: 'Candidates' },
+    { href: '/dashboard/my-teams', icon: '👥', label: 'My Teams' },
+    { href: '/dashboard/jobs', icon: '💼', label: 'Jobs' },
+    { href: '/dashboard/settings', icon: '⚙️', label: 'Settings' },
   ],
   recruiter: [
     { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
     { href: '/dashboard/jobs', icon: '💼', label: 'Assigned Jobs' },
     { href: '/dashboard/candidates', icon: '👥', label: 'My Candidates' },
+    { href: '/dashboard/settings', icon: '⚙️', label: 'Settings' },
   ],
 };
 
@@ -51,16 +57,35 @@ const ROLE_LABELS: Record<string, string> = {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const supabase = createClient();
+  const queryClient = useQueryClient();
   const { user, role, loading } = useUserContext();
 
-  const navItems = ROLE_NAV[role] ?? ROLE_NAV.recruiter;
+  // Redirect to login if unauthenticated (after loading completes)
+  useEffect(() => {
+    if (!loading && !user) {
+      window.location.href = '/login';
+    }
+  }, [loading, user]);
+
+  const navItems = ROLE_NAV[role] ?? [];
 
   async function handleSignOut() {
+    const supabase = createClient();
     await supabase.auth.signOut();
+    // Clear ALL cached data so the next user doesn't see stale data
+    queryClient.clear();
     toast.success('Signed out');
-    router.push('/login');
-    router.refresh();
+    // Hard redirect: fully reloads the app so no React state survives
+    window.location.href = '/login';
+  }
+
+  // Show nothing while loading or unauthenticated (redirect happening)
+  if (loading || !user) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#0a0f1e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ color: '#64748b', fontSize: '0.875rem' }}>Loading…</div>
+      </div>
+    );
   }
 
   return (

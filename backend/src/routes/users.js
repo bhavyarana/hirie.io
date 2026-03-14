@@ -26,14 +26,16 @@ router.get('/', requireRole('admin'), async (req, res) => {
   res.json({ users: data });
 });
 
-// POST /api/users - admin only: create/invite user
-// Supabase doesn't support direct invite from service role easily; instead, 
-// upsert the users row – the auth account must be created via Supabase invite or signup.
+// POST /api/users - admin only: create user directly with a password (no email invite)
 router.post('/', requireRole('admin'), async (req, res) => {
-  const { email, name, role } = req.body;
+  const { email, name, role, password } = req.body;
 
   if (!email || !role) {
     return res.status(400).json({ error: 'email and role are required' });
+  }
+
+  if (!password || password.length < 6) {
+    return res.status(400).json({ error: 'password is required and must be at least 6 characters' });
   }
 
   const validRoles = ['admin', 'manager', 'tl', 'recruiter'];
@@ -41,24 +43,45 @@ router.post('/', requireRole('admin'), async (req, res) => {
     return res.status(400).json({ error: `role must be one of: ${validRoles.join(', ')}` });
   }
 
-  // Try to invite via Supabase admin API
-  const { data: inviteData, error: inviteErr } = await supabase.auth.admin.inviteUserByEmail(email, {
-    data: { name, role },
+  // Create user directly via Supabase admin API — no invite email sent
+  const { data: createData, error: createErr } = await supabase.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true, // auto-confirm so user can log in immediately
+    user_metadata: { name, role },
   });
 
-  if (inviteErr) {
-    logger.error('Invite user error:', inviteErr);
-    return res.status(500).json({ error: inviteErr.message || 'Failed to invite user' });
+  if (createErr) {
+    logger.error('Create user error:', createErr);
+    return res.status(500).json({ error: createErr.message || 'Failed to create user' });
   }
 
-  const uid = inviteData?.user?.id;
+  const uid = createData?.user?.id;
 
   if (uid) {
-    // Upsert users row
+    // Upsert users row with role
     await supabase.from('users').upsert({ id: uid, email, name, role }, { onConflict: 'id' });
   }
 
-  res.status(201).json({ message: `Invitation sent to ${email}`, userId: uid });
+  logger.info(`User created: ${email} (${role}) by admin ${req.user.id}`);
+  res.status(201).json({ message: `User ${email} created successfully`, userId: uid });
+});
+
+// POST /api/users/:id/reset-password - admin only: reset another user's password
+router.post('/:id/reset-password', requireRole('admin'), async (req, res) => {
+  const { password } = req.body;
+  if (!password || password.length < 6) {
+    return res.status(400).json({ error: 'password must be at least 6 characters' });
+  }
+
+  const { error } = await supabase.auth.admin.updateUserById(req.params.id, { password });
+  if (error) {
+    logger.error('Password reset error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to reset password' });
+  }
+
+  logger.info(`Password reset for user ${req.params.id} by admin ${req.user.id}`);
+  res.json({ message: 'Password updated successfully' });
 });
 
 // PATCH /api/users/:id - admin only: update user role or name

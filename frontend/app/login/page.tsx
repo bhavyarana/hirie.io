@@ -1,36 +1,41 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
 import Link from 'next/link';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function LoginPage() {
-  const [tab, setTab] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
-  const supabase = createClient();
+  const queryClient = useQueryClient();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     try {
-      if (tab === 'login') {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        toast.success('Welcome back!');
-        router.push('/dashboard');
-        router.refresh();
-      } else {
-        const { error } = await supabase.auth.signUp({ email, password, options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`,
-        }});
-        if (error) throw error;
-        toast.success('Account created! Check your email to confirm.');
+      const supabase = createClient();
+
+      // Sign out any existing session first to ensure a clean slate
+      await supabase.auth.signOut();
+
+      // Clear ALL cached query data from any previous session
+      queryClient.clear();
+
+      // Sign in with the entered credentials
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+      if (error) throw error;
+
+      if (!data.session) {
+        throw new Error('Login failed — no session returned. Please try again.');
       }
+
+      toast.success('Welcome back!');
+      // Hard navigate to flush all server-side state
+      window.location.href = '/dashboard';
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Something went wrong';
       toast.error(message);
@@ -72,24 +77,12 @@ export default function LoginPage() {
           background: '#0d1526', border: '1px solid #1e2d4a',
           borderRadius: '1rem', padding: '2rem', boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
         }}>
-          {/* Tabs */}
-          <div style={{
-            display: 'flex', background: '#0a0f1e', borderRadius: '0.625rem',
-            padding: '0.25rem', marginBottom: '1.75rem',
-          }}>
-            {(['login', 'signup'] as const).map(t => (
-              <button key={t} onClick={() => setTab(t)}
-                style={{
-                  flex: 1, padding: '0.625rem', borderRadius: '0.5rem',
-                  border: 'none', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500,
-                  transition: 'all 0.2s',
-                  background: tab === t ? '#6366f1' : 'transparent',
-                  color: tab === t ? '#fff' : '#64748b',
-                }}>
-                {t === 'login' ? 'Sign In' : 'Sign Up'}
-              </button>
-            ))}
-          </div>
+          <h2 style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '1.25rem', marginBottom: '0.25rem' }}>
+            Sign In
+          </h2>
+          <p style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '1.75rem' }}>
+            Enter your credentials to access the dashboard.
+          </p>
 
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: '1rem' }}>
@@ -97,9 +90,13 @@ export default function LoginPage() {
                 Email Address
               </label>
               <input
-                type="email" placeholder="recruiter@company.com"
-                value={email} onChange={e => setEmail(e.target.value)}
-                required style={inputStyle}
+                type="email"
+                placeholder="you@company.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                autoComplete="username"
+                style={inputStyle}
                 onFocus={e => (e.target.style.borderColor = '#6366f1')}
                 onBlur={e => (e.target.style.borderColor = '#2d3f5f')}
               />
@@ -109,28 +106,38 @@ export default function LoginPage() {
                 Password
               </label>
               <input
-                type="password" placeholder="••••••••"
-                value={password} onChange={e => setPassword(e.target.value)}
-                required minLength={6} style={inputStyle}
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                minLength={6}
+                autoComplete="current-password"
+                style={inputStyle}
                 onFocus={e => (e.target.style.borderColor = '#6366f1')}
                 onBlur={e => (e.target.style.borderColor = '#2d3f5f')}
               />
             </div>
-            <button type="submit" disabled={loading} style={{
-              width: '100%', padding: '0.875rem',
-              background: loading ? '#4f46e5' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-              color: '#fff', border: 'none', borderRadius: '0.625rem',
-              fontSize: '0.9375rem', fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
-              boxShadow: '0 0 30px rgba(99,102,241,0.35)',
-              transition: 'all 0.2s',
-            }}>
-              {loading ? 'Please wait…' : tab === 'login' ? 'Sign In' : 'Create Account'}
+            <button
+              type="submit"
+              disabled={loading}
+              style={{
+                width: '100%', padding: '0.875rem',
+                background: loading ? '#4f46e5' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                color: '#fff', border: 'none', borderRadius: '0.625rem',
+                fontSize: '0.9375rem', fontWeight: 600,
+                cursor: loading ? 'not-allowed' : 'pointer',
+                boxShadow: '0 0 30px rgba(99,102,241,0.35)',
+                transition: 'all 0.2s',
+              }}
+            >
+              {loading ? 'Signing in…' : 'Sign In'}
             </button>
           </form>
         </div>
 
-        <p style={{ textAlign: 'center', color: '#475569', fontSize: '0.8rem', marginTop: '1.5rem' }}>
-          By continuing you agree to our Terms of Service and Privacy Policy.
+        <p style={{ textAlign: 'center', color: '#475569', fontSize: '0.75rem', marginTop: '1.5rem' }}>
+          Contact your administrator if you need an account.
         </p>
       </div>
     </div>
