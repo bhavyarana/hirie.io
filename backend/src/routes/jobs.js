@@ -27,13 +27,23 @@ async function buildJobsQuery(user) {
   }
 
   if (role === 'manager') {
-    // Manager sees jobs they created or jobs in their teams
+    // Manager sees jobs they created OR jobs in their teams (via job_teams junction)
     const { data: managerTeams } = await supabase
       .from('teams').select('id').eq('manager_id', userId);
     const teamIds = (managerTeams || []).map(t => t.id);
+
     if (teamIds.length > 0) {
-      return query.or(`created_by.eq.${userId},assigned_team_id.in.(${teamIds.join(',')})`);
+      // Get job IDs from job_teams
+      const { data: jtRows } = await supabase
+        .from('job_teams').select('job_id').in('team_id', teamIds);
+      const teamJobIds = (jtRows || []).map(r => r.job_id);
+
+      if (teamJobIds.length > 0) {
+        // Jobs created by manager OR in their teams via job_teams
+        return query.or(`created_by.eq.${userId},id.in.(${teamJobIds.join(',')})`);
+      }
     }
+    // No teams or no team jobs — just their own created jobs
     return query.eq('created_by', userId);
   }
 
@@ -313,33 +323,66 @@ router.get('/:id/teams', async (req, res) => {
 router.get('/analytics/overview', requireRole('admin', 'manager'), async (req, res) => {
   const { id: userId, role } = req.user;
 
-  let jobsQ = supabase.from('jobs').select('id, status', { count: 'exact' });
+  let scopedJobIds = null; // null = all jobs (admin)
+
   if (role === 'manager') {
-    const { data: teams } = await supabase.from('teams').select('id').eq('manager_id', userId);
-    const tids = (teams || []).map(t => t.id);
-    if (tids.length > 0) jobsQ = jobsQ.or(`created_by.eq.${userId},assigned_team_id.in.(${tids.join(',')})`);
-    else jobsQ = jobsQ.eq('created_by', userId);
+    const { data: mgrTeams } = await supabase.from('teams').select('id').eq('manager_id', userId);
+    const tids = (mgrTeams || []).map(t => t.id);
+
+    let teamJobIds = [];
+    if (tids.length > 0) {
+      const { data: jtRows } = await supabase.from('job_teams').select('job_id').in('team_id', tids);
+      teamJobIds = (jtRows || []).map(r => r.job_id);
+    }
+
+    // Jobs created by manager OR in their teams
+    const { data: createdJobs } = await supabase.from('jobs').select('id').eq('created_by', userId);
+    const createdIds = (createdJobs || []).map(j => j.id);
+    scopedJobIds = [...new Set([...createdIds, ...teamJobIds])];
+  }
+
+  // Job counts
+  let jobsQ = supabase.from('jobs').select('id, status', { count: 'exact' });
+  if (scopedJobIds !== null) {
+    if (scopedJobIds.length === 0) {
+      return res.json({ total_jobs: 0, active_jobs: 0, total_candidates: 0, total_users: 0, total_teams: 0 });
+    }
+    jobsQ = jobsQ.in('id', scopedJobIds);
   }
 
   const { data: jobs, count: jobCount } = await jobsQ;
   const activeJobs = (jobs || []).filter(j => j.status === 'active').length;
 
-  const { count: candidateCount } = await supabase
-    .from('candidates').select('id', { count: 'exact', head: true });
+  // Candidate count scoped to manager's jobs
+  let candidateCount = 0;
+  if (scopedJobIds !== null) {
+    const { count } = await supabase.from('candidates').select('id', { count: 'exact', head: true }).in('job_id', scopedJobIds);
+    candidateCount = count || 0;
+  } else {
+    const { count } = await supabase.from('candidates').select('id', { count: 'exact', head: true });
+    candidateCount = count || 0;
+  }
 
-  const { count: userCount } = await supabase
-    .from('users').select('id', { count: 'exact', head: true });
+  // Team count scoped to manager
+  let teamCount = 0;
+  if (role === 'manager') {
+    const { count } = await supabase.from('teams').select('id', { count: 'exact', head: true }).eq('manager_id', userId);
+    teamCount = count || 0;
+  } else {
+    const { count } = await supabase.from('teams').select('id', { count: 'exact', head: true });
+    teamCount = count || 0;
+  }
 
-  const { count: teamCount } = await supabase
-    .from('teams').select('id', { count: 'exact', head: true });
+  const { count: userCount } = await supabase.from('users').select('id', { count: 'exact', head: true });
 
   res.json({
     total_jobs: jobCount || 0,
     active_jobs: activeJobs || 0,
-    total_candidates: candidateCount || 0,
+    total_candidates: candidateCount,
     total_users: userCount || 0,
-    total_teams: teamCount || 0,
+    total_teams: teamCount,
   });
 });
+
 
 module.exports = router;

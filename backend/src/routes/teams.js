@@ -102,13 +102,26 @@ router.get('/:teamId', requireTeamAccess('teamId'), async (req, res) => {
     .eq('team_id', req.params.teamId)
     .order('created_at', { ascending: true });
 
-  // Get job count for this team
-  const { count: jobCount } = await supabase
-    .from('jobs')
-    .select('id', { count: 'exact', head: true })
-    .eq('assigned_team_id', req.params.teamId);
+  // Get job count via job_teams (multi-team support)
+  const { data: jtCount } = await supabase
+    .from('job_teams')
+    .select('job_id')
+    .eq('team_id', req.params.teamId);
+  const jobCount = (jtCount || []).length;
 
-  res.json({ team: { ...team, members: members || [], job_count: jobCount || 0 } });
+  // Get the actual jobs for this team
+  const jobIds = (jtCount || []).map(r => r.job_id);
+  let teamJobs = [];
+  if (jobIds.length > 0) {
+    const { data: jobData } = await supabase
+      .from('jobs')
+      .select('id, job_title, company_name, status, created_at')
+      .in('id', jobIds)
+      .order('created_at', { ascending: false });
+    teamJobs = jobData || [];
+  }
+
+  res.json({ team: { ...team, members: members || [], job_count: jobCount, jobs: teamJobs } });
 });
 
 // PATCH /api/teams/:teamId - update team
@@ -183,23 +196,62 @@ router.delete('/:teamId/members/:userId', requireRole('admin', 'manager'), requi
   res.json({ message: 'Member removed' });
 });
 
-// GET /api/teams/:teamId/jobs - list jobs for a team
+// GET /api/teams/:teamId/jobs - list jobs for a team (via job_teams)
 router.get('/:teamId/jobs', requireTeamAccess('teamId'), async (req, res) => {
+  // Get job IDs from job_teams junction
+  const { data: jtRows } = await supabase
+    .from('job_teams').select('job_id').eq('team_id', req.params.teamId);
+  const jobIds = (jtRows || []).map(r => r.job_id);
+
+  if (jobIds.length === 0) return res.json({ jobs: [] });
+
   const { data, error } = await supabase
     .from('jobs')
     .select('*, candidates(count)')
-    .eq('assigned_team_id', req.params.teamId)
+    .in('id', jobIds)
     .order('created_at', { ascending: false });
 
   if (error) return res.status(500).json({ error: 'Failed to fetch team jobs' });
 
-  const jobs = data.map(j => ({
+  const jobs = (data || []).map(j => ({
     ...j,
     candidate_count: j.candidates?.[0]?.count || 0,
     candidates: undefined,
   }));
 
   res.json({ jobs });
+});
+
+// POST /api/teams/:teamId/assign-jobs — assign multiple active jobs to this team
+router.post('/:teamId/assign-jobs', requireRole('admin', 'manager'), requireTeamAccess('teamId'), async (req, res) => {
+  const { job_ids } = req.body;
+  if (!Array.isArray(job_ids)) return res.status(400).json({ error: 'job_ids must be an array' });
+
+  // For each job, upsert into job_teams and update assigned_team_id (legacy compat)
+  const errors = [];
+  for (const jobId of job_ids) {
+    const { error } = await supabase
+      .from('job_teams')
+      .upsert({ job_id: jobId, team_id: req.params.teamId }, { onConflict: 'job_id,team_id' });
+    if (error) errors.push({ jobId, error: error.message });
+  }
+
+  if (errors.length > 0) {
+    return res.status(500).json({ error: 'Some jobs failed to assign', details: errors });
+  }
+
+  res.json({ message: 'Jobs assigned successfully', count: job_ids.length });
+});
+
+// DELETE /api/teams/:teamId/assign-jobs/:jobId — remove a job from a team
+router.delete('/:teamId/assign-jobs/:jobId', requireRole('admin', 'manager'), requireTeamAccess('teamId'), async (req, res) => {
+  const { error } = await supabase
+    .from('job_teams')
+    .delete()
+    .eq('team_id', req.params.teamId)
+    .eq('job_id', req.params.jobId);
+  if (error) return res.status(500).json({ error: 'Failed to remove job from team' });
+  res.json({ message: 'Job removed from team' });
 });
 
 // GET /api/teams/:teamId/analytics - team aggregate stats

@@ -12,13 +12,16 @@ router.get('/me', async (req, res) => {
   res.json({ user: req.user });
 });
 
-// GET /api/users - admin only: list all users
-router.get('/', requireRole('admin'), async (req, res) => {
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .order('created_at', { ascending: false });
+// GET /api/users - admin: all users; manager: tl + recruiter users only (for team setup)
+router.get('/', requireRole('admin', 'manager'), async (req, res) => {
+  let query = supabase.from('users').select('*').order('created_at', { ascending: false });
 
+  // Managers only need to see TLs and recruiters for team assignment
+  if (req.user.role === 'manager') {
+    query = query.in('role', ['tl', 'recruiter']);
+  }
+
+  const { data, error } = await query;
   if (error) {
     logger.error('Error fetching users:', error);
     return res.status(500).json({ error: 'Failed to fetch users' });

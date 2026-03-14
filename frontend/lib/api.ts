@@ -54,6 +54,10 @@ export const teamsApi = {
     apiFetch(`/api/teams/${teamId}/members/${userId}`, { method: 'DELETE' }),
   getJobs: (teamId: string) => apiFetch<{ jobs: Job[] }>(`/api/teams/${teamId}/jobs`),
   getAnalytics: (teamId: string) => apiFetch<TeamAnalytics>(`/api/teams/${teamId}/analytics`),
+  assignJobs: (teamId: string, jobIds: string[]) =>
+    apiFetch<{ message: string }>(`/api/teams/${teamId}/assign-jobs`, { method: 'POST', body: JSON.stringify({ job_ids: jobIds }) }),
+  removeJob: (teamId: string, jobId: string) =>
+    apiFetch(`/api/teams/${teamId}/assign-jobs/${jobId}`, { method: 'DELETE' }),
 };
 
 // ─── Notifications ──────────────────────────────────────────────────────────
@@ -211,6 +215,7 @@ export interface TeamMember {
 export interface TeamDetail extends Team {
   members: TeamMember[];
   job_count: number;
+  jobs?: { id: string; job_title: string; company_name: string; status: string; created_at: string }[];
 }
 
 export interface CreateTeamData {
