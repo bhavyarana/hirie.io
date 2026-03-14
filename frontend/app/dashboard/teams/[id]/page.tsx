@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { teamsApi, jobsApi, usersApi, TeamMember, UserRecord, Job } from '@/lib/api';
+import { teamsApi, jobsApi, jobAssignmentsApi, usersApi, TeamMember, UserRecord, Job, JobAssignment } from '@/lib/api';
 import { useUserContext } from '@/lib/context/UserContext';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -202,7 +202,12 @@ export default function TeamDetailPage() {
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({ queryKey: ['team', teamId], queryFn: () => teamsApi.get(teamId) });
-  const { data: usersData } = useQuery({ queryKey: ['users'], queryFn: () => usersApi.list(), enabled: role === 'admin' || role === 'manager' });
+  const { data: usersData } = useQuery({ queryKey: ['users'], queryFn: () => usersApi.list(), enabled: role === 'admin' || role === 'manager' || role === 'tl' });
+  const { data: assignmentsData, refetch: refetchAssignments } = useQuery({
+    queryKey: ['job-assignments'],
+    queryFn: () => jobAssignmentsApi.list(),
+  });
+  const allAssignments: JobAssignment[] = assignmentsData?.assignments ?? [];
 
   const canManage = role === 'admin' || role === 'manager';
   const isAdmin = role === 'admin';
@@ -371,6 +376,154 @@ export default function TeamDetailPage() {
           </table>
         )}
       </div>
+
+      {/* Member Job Assignments — for TL, admin, manager */}
+      {(role === 'tl' || canManage) && members.length > 0 && (
+        <MemberAssignmentsSection
+          teamId={teamId}
+          members={members}
+          teamJobs={teamJobs}
+          allAssignments={allAssignments}
+          onRefetch={refetchAssignments}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Member Assignments Section ───────────────────────────────────────────────
+function MemberAssignmentsSection({ teamId, members, teamJobs, allAssignments, onRefetch }: {
+  teamId: string;
+  members: TeamMember[];
+  teamJobs: { id: string; job_title: string; company_name: string; status: string; created_at: string }[];
+  allAssignments: JobAssignment[];
+  onRefetch: () => void;
+}) {
+  // Only show active team jobs in the picker
+  const activeTeamJobs = teamJobs.filter(j => j.status === 'active');
+
+  return (
+    <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', overflow: 'hidden', marginTop: '1.5rem' }}>
+      <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #1e2d4a' }}>
+        <h2 style={{ color: '#e2e8f0', fontWeight: 600, fontSize: '1rem' }}>
+          Job Assignments
+          <span style={{ color: '#64748b', fontWeight: 400, fontSize: '0.8rem', marginLeft: '0.5rem' }}>— assign team jobs to members</span>
+        </h2>
+      </div>
+
+      {activeTeamJobs.length === 0 ? (
+        <div style={{ padding: '1.5rem', color: '#475569', fontSize: '0.875rem', textAlign: 'center' }}>
+          No active jobs in this team to assign.
+        </div>
+      ) : (
+        <div style={{ padding: '1rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {members.map(member => {
+            const memberAssignments = allAssignments.filter(a => a.recruiter_id === member.user_id);
+            return (
+              <MemberAssignRow
+                key={member.user_id}
+                member={member}
+                teamJobs={activeTeamJobs}
+                assignments={memberAssignments}
+                onRefetch={onRefetch}
+              />
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MemberAssignRow({ member, teamJobs, assignments, onRefetch }: {
+  member: TeamMember;
+  teamJobs: { id: string; job_title: string; company_name: string }[];
+  assignments: JobAssignment[];
+  onRefetch: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set(assignments.map(a => a.job_id)));
+  const [saving, setSaving] = useState(false);
+
+  // Sync when assignments change externally
+  useEffect(() => {
+    setSelected(new Set(assignments.map(a => a.job_id)));
+  }, [assignments]);
+
+  function toggle(id: string) {
+    setSelected(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await jobAssignmentsApi.bulkAssign(member.user_id, Array.from(selected));
+      toast.success(`Jobs updated for ${member.user?.name || member.user?.email}`);
+      onRefetch();
+      setOpen(false);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save assignments');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const assignedNow = teamJobs.filter(j => assignments.some(a => a.job_id === j.id));
+
+  return (
+    <div style={{ border: '1px solid #1e2d4a', borderRadius: '0.75rem', overflow: 'hidden', background: '#0a0f1e' }}>
+      {/* Member row header */}
+      <div style={{ padding: '0.875rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <span style={{ color: '#e2e8f0', fontWeight: 600, fontSize: '0.9rem' }}>{member.user?.name || member.user?.email || '—'}</span>
+          <span style={{ marginLeft: '0.75rem', fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '999px',
+            background: member.role_in_team === 'tl' ? 'rgba(34,197,94,0.1)' : 'rgba(56,189,248,0.1)',
+            color: member.role_in_team === 'tl' ? '#22c55e' : '#38bdf8',
+            border: `1px solid ${member.role_in_team === 'tl' ? 'rgba(34,197,94,0.3)' : 'rgba(56,189,248,0.3)'}` }}>
+            {member.role_in_team === 'tl' ? 'Team Leader' : 'Recruiter'}
+          </span>
+        </div>
+        <button onClick={() => { setOpen(p => !p); setSelected(new Set(assignments.map(a => a.job_id))); }}
+          style={{ padding: '0.35rem 0.875rem', borderRadius: '0.5rem', border: '1px solid rgba(99,102,241,0.35)', background: open ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.07)', color: '#a5b4fc', cursor: 'pointer', fontSize: '0.775rem', fontWeight: 600 }}>
+          {open ? 'Cancel' : '+ Assign Jobs'}
+        </button>
+      </div>
+
+      {/* Currently assigned job tags */}
+      {!open && (
+        <div style={{ padding: '0 1.25rem 0.875rem', display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
+          {assignedNow.length === 0 ? (
+            <span style={{ color: '#475569', fontSize: '0.775rem' }}>No jobs assigned yet</span>
+          ) : assignedNow.map(j => (
+            <span key={j.id} style={{ padding: '0.2rem 0.625rem', borderRadius: '4px', fontSize: '0.73rem', background: 'rgba(99,102,241,0.12)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.25)' }}>
+              {j.job_title}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Job picker */}
+      {open && (
+        <div style={{ borderTop: '1px solid #1e2d4a', padding: '0.875rem 1.25rem', background: '#0d1526' }}>
+          <p style={{ color: '#64748b', fontSize: '0.78rem', marginBottom: '0.625rem' }}>Select jobs to assign (team jobs only):</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '200px', overflowY: 'auto', marginBottom: '0.875rem' }}>
+            {teamJobs.map(job => (
+              <label key={job.id} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', padding: '0.45rem 0.625rem', borderRadius: '0.375rem', background: selected.has(job.id) ? 'rgba(99,102,241,0.1)' : 'transparent', transition: 'background 0.15s' }}>
+                <input type="checkbox" checked={selected.has(job.id)} onChange={() => toggle(job.id)}
+                  style={{ accentColor: '#6366f1', width: '15px', height: '15px', flexShrink: 0 }} />
+                <span style={{ color: '#e2e8f0', fontSize: '0.825rem', flex: 1 }}>{job.job_title}</span>
+                <span style={{ color: '#64748b', fontSize: '0.73rem' }}>{job.company_name}</span>
+              </label>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+            <button onClick={() => setOpen(false)} style={{ padding: '0.4rem 0.875rem', borderRadius: '0.375rem', border: '1px solid #1e2d4a', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8rem' }}>Cancel</button>
+            <button onClick={handleSave} disabled={saving} style={{ padding: '0.4rem 1rem', borderRadius: '0.375rem', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>
+              {saving ? 'Saving…' : `Save (${selected.size} job${selected.size !== 1 ? 's' : ''})`}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

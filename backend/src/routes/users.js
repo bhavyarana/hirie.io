@@ -12,12 +12,12 @@ router.get('/me', async (req, res) => {
   res.json({ user: req.user });
 });
 
-// GET /api/users - admin: all users; manager: tl + recruiter users only (for team setup)
-router.get('/', requireRole('admin', 'manager'), async (req, res) => {
+// GET /api/users - admin: all users; manager/tl: tl + recruiter users only
+router.get('/', requireRole('admin', 'manager', 'tl'), async (req, res) => {
   let query = supabase.from('users').select('*').order('created_at', { ascending: false });
 
-  // Managers only need to see TLs and recruiters for team assignment
-  if (req.user.role === 'manager') {
+  // Managers and TLs only need tl + recruiter users for team features
+  if (req.user.role === 'manager' || req.user.role === 'tl') {
     query = query.in('role', ['tl', 'recruiter']);
   }
 
