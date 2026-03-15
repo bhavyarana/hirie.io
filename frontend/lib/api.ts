@@ -251,6 +251,17 @@ export interface TeamAnalytics {
   recruiter_performance: { recruiter_id: string; count: number }[];
 }
 
+export interface ScoringCriteria {
+  pass_threshold: number;   // default 70
+  review_threshold: number; // default 50
+  weights: {
+    technical_skills: number;  // default 35
+    experience: number;        // default 30
+    education: number;         // default 20
+    soft_skills: number;       // default 15
+  };
+}
+
 export interface Job {
   id: string;
   job_title: string;
@@ -264,6 +275,7 @@ export interface Job {
   teams?: { id: string; name: string }[];
   team?: { id: string; name: string } | null;
   creator?: { id: string; name: string | null; email: string } | null;
+  scoring_criteria?: ScoringCriteria | null;
   created_at: string;
 }
 
@@ -292,6 +304,7 @@ export interface CreateJobData {
   required_skills?: string[];
   assigned_team_id?: string | null;
   status?: 'active' | 'closed' | 'draft';
+  scoring_criteria?: ScoringCriteria | null;
 }
 
 export interface JobsOverview {

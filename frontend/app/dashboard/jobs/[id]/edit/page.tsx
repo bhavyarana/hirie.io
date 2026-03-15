@@ -2,13 +2,19 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { jobsApi, teamsApi, type CreateJobData } from '@/lib/api';
+import { jobsApi, teamsApi, type CreateJobData, type ScoringCriteria } from '@/lib/api';
 import { useUserContext } from '@/lib/context/UserContext';
 import { useRouter, useParams } from 'next/navigation';
 import { toast } from 'sonner';
 import Link from 'next/link';
 
 const SKILLS_PLACEHOLDER = 'React, Node.js, TypeScript…';
+
+const DEFAULT_SCORING: ScoringCriteria = {
+  pass_threshold: 70,
+  review_threshold: 50,
+  weights: { technical_skills: 35, experience: 30, education: 20, soft_skills: 15 },
+};
 
 export default function EditJobPage() {
   const params = useParams();
@@ -23,6 +29,7 @@ export default function EditJobPage() {
   const [skillsInput, setSkillsInput] = useState('');
   const [status, setStatus] = useState<'active' | 'closed' | 'draft'>('active');
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
+  const [scoring, setScoring] = useState<ScoringCriteria>(DEFAULT_SCORING);
   const [loaded, setLoaded] = useState(false);
 
   // Redirect if not admin or manager
@@ -56,11 +63,23 @@ export default function EditJobPage() {
       setStatus(j.status as 'active' | 'closed' | 'draft');
       // Pre-check teams from the many-to-many assignment
       const teamIds = (j.teams ?? []).map((t: { id: string }) => t.id);
-      // Fallback to assigned_team_id if job_teams is empty
       if (teamIds.length > 0) {
         setSelectedTeamIds(new Set(teamIds));
       } else if (j.assigned_team_id) {
         setSelectedTeamIds(new Set([j.assigned_team_id]));
+      }
+      // Pre-populate scoring criteria (fall back to defaults if not set)
+      if (j.scoring_criteria) {
+        setScoring({
+          pass_threshold: j.scoring_criteria.pass_threshold ?? 70,
+          review_threshold: j.scoring_criteria.review_threshold ?? 50,
+          weights: {
+            technical_skills: j.scoring_criteria.weights?.technical_skills ?? 35,
+            experience: j.scoring_criteria.weights?.experience ?? 30,
+            education: j.scoring_criteria.weights?.education ?? 20,
+            soft_skills: j.scoring_criteria.weights?.soft_skills ?? 15,
+          },
+        });
       }
       setLoaded(true);
     }
@@ -89,17 +108,19 @@ export default function EditJobPage() {
     });
   }
 
+  const weightsTotal = Object.values(scoring.weights).reduce((a, b) => a + b, 0);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!jobTitle.trim() || !companyName.trim() || !description.trim()) {
       toast.error('Job title, company name, and description are required');
       return;
     }
-    const skills = skillsInput
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean);
-
+    if (weightsTotal !== 100) {
+      toast.error(`Dimension weights must total 100% (currently ${weightsTotal}%)`);
+      return;
+    }
+    const skills = skillsInput.split(',').map(s => s.trim()).filter(Boolean);
     const firstTeam = selectedTeamIds.size > 0 ? Array.from(selectedTeamIds)[0] : null;
     updateMutation.mutate({
       job_title: jobTitle.trim(),
@@ -108,6 +129,7 @@ export default function EditJobPage() {
       required_skills: skills,
       assigned_team_id: firstTeam,
       status,
+      scoring_criteria: scoring,
     } as Partial<CreateJobData>);
   };
 
@@ -155,7 +177,7 @@ export default function EditJobPage() {
       </div>
 
       <form onSubmit={handleSubmit}>
-        <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', marginBottom: '1.5rem' }}>
 
           {/* Job Title */}
           <div>
@@ -254,8 +276,80 @@ export default function EditJobPage() {
           </div>
         </div>
 
+        {/* ── Scoring Criteria ─────────────────────────────────────── */}
+        <div style={{
+          background: '#0d1526', border: '1px solid rgba(99,102,241,0.25)',
+          borderRadius: '1rem', padding: '1.75rem', marginBottom: '1.5rem',
+          position: 'relative', overflow: 'hidden',
+        }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2px', background: 'linear-gradient(90deg, #6366f1, #8b5cf6)' }} />
+          <h2 style={{ color: '#e2e8f0', fontWeight: 600, marginBottom: '0.25rem', fontSize: '1rem' }}>🎯 Scoring Criteria</h2>
+          <p style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '1.5rem' }}>
+            These settings control how AI scores future resume uploads for this job.
+          </p>
+
+          {/* Thresholds */}
+          <div style={{ marginBottom: '1.5rem' }}>
+            <p style={{ color: '#94a3b8', fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Pass / Review / Fail Thresholds
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '0.75rem' }}>
+              <div>
+                <label style={{ color: '#94a3b8', fontSize: '0.78rem', display: 'block', marginBottom: '0.4rem' }}>Pass Threshold (score ≥)</label>
+                <input type="number" min={1} max={100}
+                  value={scoring.pass_threshold}
+                  onChange={e => setScoring(s => ({ ...s, pass_threshold: Math.max(1, Math.min(100, +e.target.value)) }))}
+                  style={{ width: '100%', padding: '0.6rem 0.875rem', borderRadius: '0.5rem', background: '#0a0f1e', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box' as const }} />
+              </div>
+              <div>
+                <label style={{ color: '#94a3b8', fontSize: '0.78rem', display: 'block', marginBottom: '0.4rem' }}>Review Threshold (score ≥)</label>
+                <input type="number" min={1} max={99}
+                  value={scoring.review_threshold}
+                  onChange={e => setScoring(s => ({ ...s, review_threshold: Math.max(1, Math.min(99, +e.target.value)) }))}
+                  style={{ width: '100%', padding: '0.6rem 0.875rem', borderRadius: '0.5rem', background: '#0a0f1e', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box' as const }} />
+              </div>
+            </div>
+            {/* Live preview badges */}
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' as const }}>
+              <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', fontSize: '0.72rem', fontWeight: 700 }}>✅ PASS ≥ {scoring.pass_threshold}</span>
+              <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '0.72rem', fontWeight: 700 }}>🔶 REVIEW ≥ {scoring.review_threshold}</span>
+              <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', fontSize: '0.72rem', fontWeight: 700 }}>❌ FAIL &lt; {scoring.review_threshold}</span>
+            </div>
+          </div>
+
+          {/* Weightages */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <p style={{ color: '#94a3b8', fontSize: '0.78rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Dimension Weightages</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 700, color: weightsTotal === 100 ? '#22c55e' : '#ef4444' }}>
+                  Total: {weightsTotal}% {weightsTotal === 100 ? '✓' : '(must = 100%)'}
+                </span>
+                <button type="button" onClick={() => setScoring(s => ({ ...s, weights: { technical_skills: 35, experience: 30, education: 20, soft_skills: 15 } }))} style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem', borderRadius: '0.3rem', background: 'rgba(100,116,139,0.1)', border: '1px solid rgba(100,116,139,0.25)', color: '#64748b', cursor: 'pointer' }}>↺ Reset</button>
+              </div>
+            </div>
+            {([
+              { key: 'technical_skills', label: '⚙️ Technical & Domain Skills', color: '#6366f1' },
+              { key: 'experience', label: '💼 Professional Experience', color: '#8b5cf6' },
+              { key: 'education', label: '🎓 Education & Certifications', color: '#06b6d4' },
+              { key: 'soft_skills', label: '🤝 Communication & Soft Skills', color: '#f59e0b' },
+            ] as const).map(({ key, label, color }) => (
+              <div key={key} style={{ marginBottom: '0.875rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                  <label style={{ color: '#94a3b8', fontSize: '0.8rem' }}>{label}</label>
+                  <span style={{ color, fontWeight: 700, fontSize: '0.85rem', minWidth: '3rem', textAlign: 'right' as const }}>{scoring.weights[key]}%</span>
+                </div>
+                <input type="range" min={0} max={100}
+                  value={scoring.weights[key]}
+                  onChange={e => setScoring(s => ({ ...s, weights: { ...s.weights, [key]: +e.target.value } }))}
+                  style={{ width: '100%', accentColor: color }} />
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Actions */}
-        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem', justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
           <Link
             href={`/dashboard/jobs/${jobId}`}
             style={{ padding: '0.75rem 1.5rem', borderRadius: '0.625rem', border: '1px solid #1e2d4a', color: '#94a3b8', textDecoration: 'none', fontSize: '0.875rem', display: 'inline-block' }}
@@ -264,11 +358,12 @@ export default function EditJobPage() {
           </Link>
           <button
             type="submit"
-            disabled={updateMutation.isPending}
+            disabled={updateMutation.isPending || weightsTotal !== 100}
             style={{
               padding: '0.75rem 2rem', borderRadius: '0.625rem',
-              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-              color: '#fff', border: 'none', cursor: updateMutation.isPending ? 'not-allowed' : 'pointer',
+              background: weightsTotal !== 100 ? '#1e2d4a' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              color: weightsTotal !== 100 ? '#64748b' : '#fff',
+              border: 'none', cursor: (updateMutation.isPending || weightsTotal !== 100) ? 'not-allowed' : 'pointer',
               fontSize: '0.875rem', fontWeight: 600,
               opacity: updateMutation.isPending ? 0.7 : 1,
             }}

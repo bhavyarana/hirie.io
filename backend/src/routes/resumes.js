@@ -167,6 +167,7 @@ router.post('/jobs/:id/upload', authMiddleware, upload.array('resumes', 100), as
             fileName: file.originalname,
             jobDescription: job.job_description_text,
             jobTitle: job.job_title,
+            scoringCriteria: job.scoring_criteria || null,
           }, { attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 100, removeOnFail: 50 });
 
           logger.info(`[Upload] ✓ Queued: "${file.originalname}" → ${candidate.id}`);
@@ -404,7 +405,7 @@ router.post('/candidates/:id/reprocess', authMiddleware, async (req, res) => {
 
   const { data: candidate, error } = await supabase
     .from('candidates')
-    .select('*, job:jobs!candidates_job_id_fkey(id, job_title, job_description_text)')
+    .select('*, job:jobs!candidates_job_id_fkey(id, job_title, job_description_text, scoring_criteria)')
     .eq('id', candidateId)
     .single();
 
@@ -430,6 +431,7 @@ router.post('/candidates/:id/reprocess', authMiddleware, async (req, res) => {
     fileName: candidate.resume_file_name,
     jobDescription: candidate.job?.job_description_text || '',
     jobTitle: candidate.job?.job_title || '',
+    scoringCriteria: candidate.job?.scoring_criteria || null,
   }, { attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 100, removeOnFail: 50 });
 
   logger.info(`[Reprocess] Queued candidate ${candidateId} for re-processing`);

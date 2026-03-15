@@ -75,7 +75,7 @@ async function buildJobsQuery(user) {
 
 // POST /api/jobs - Create a new job (admin, manager only)
 router.post('/', requireRole('admin', 'manager'), async (req, res) => {
-  const { job_title, company_name, job_description_text, required_skills, assigned_team_id } = req.body;
+  const { job_title, company_name, job_description_text, required_skills, assigned_team_id, scoring_criteria } = req.body;
 
   if (!job_title || !company_name || !job_description_text) {
     return res.status(400).json({ error: 'job_title, company_name, and job_description_text are required' });
@@ -99,6 +99,7 @@ router.post('/', requireRole('admin', 'manager'), async (req, res) => {
       job_description_text,
       required_skills: required_skills || [],
       assigned_team_id: assigned_team_id || null,
+      scoring_criteria: scoring_criteria || null,
     })
     .select()
     .single();

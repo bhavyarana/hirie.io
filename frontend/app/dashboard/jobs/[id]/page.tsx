@@ -168,6 +168,44 @@ export default function JobDetailPage({ params }: Props) {
         </div>
       )}
 
+      {/* Scoring Criteria card */}
+      {(() => {
+        const sc = job?.scoring_criteria;
+        const pass = sc?.pass_threshold ?? 70;
+        const review = sc?.review_threshold ?? 50;
+        const w = sc?.weights ?? { technical_skills: 35, experience: 30, education: 20, soft_skills: 15 };
+        const segments = [
+          { label: '⚙️ Technical', value: w.technical_skills, color: '#6366f1' },
+          { label: '💼 Experience', value: w.experience, color: '#8b5cf6' },
+          { label: '🎓 Education', value: w.education, color: '#06b6d4' },
+          { label: '🤝 Soft Skills', value: w.soft_skills, color: '#f59e0b' },
+        ];
+        return (
+          <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', padding: '1rem 1.5rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <p style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>🎯 Scoring Criteria{!sc && <span style={{ color: '#475569', fontWeight: 400, marginLeft: '0.5rem' }}>(system defaults)</span>}</p>
+              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', fontSize: '0.7rem', fontWeight: 700 }}>PASS ≥ {pass}</span>
+                <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '0.7rem', fontWeight: 700 }}>REVIEW ≥ {review}</span>
+                <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', fontSize: '0.7rem', fontWeight: 700 }}>FAIL &lt; {review}</span>
+              </div>
+            </div>
+            {/* Weightage bar */}
+            <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', height: '10px', marginBottom: '0.5rem' }}>
+              {segments.map(s => <div key={s.label} style={{ width: `${s.value}%`, background: s.color, transition: 'width 0.3s' }} />)}
+            </div>
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' as const }}>
+              {segments.map(s => (
+                <span key={s.label} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem', color: '#94a3b8' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: s.color, flexShrink: 0 }} />
+                  {s.label} <strong style={{ color: s.color }}>{s.value}%</strong>
+                </span>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Upload Dropzone */}
       <div {...getRootProps()} style={{
         border: `2px dashed ${isDragActive ? '#6366f1' : '#1e2d4a'}`,

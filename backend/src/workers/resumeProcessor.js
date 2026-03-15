@@ -20,6 +20,7 @@ const worker = new Worker(
       fileName,
       jobDescription,
       jobTitle,
+      scoringCriteria,
     } = job.data;
 
     logger.info(`[Worker] Processing: ${fileName} (candidate: ${candidateId})`);
@@ -76,7 +77,7 @@ const worker = new Worker(
     let scoreResult;
     try {
       logger.info(`[Worker] Scoring "${fileName}" with Mistral…`);
-      scoreResult = await scoreResume(text, jobDescription, jobTitle);
+      scoreResult = await scoreResume(text, jobDescription, jobTitle, scoringCriteria || null);
       logger.info(`[Worker] Score: ${scoreResult.score} (${scoreResult.status}) for "${fileName}"`);
     } catch (aiErr) {
       // ANY AI failure (missing key, quota exceeded, network, etc.) → use placeholder

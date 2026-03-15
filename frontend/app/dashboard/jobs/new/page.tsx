@@ -4,15 +4,22 @@ import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDropzone } from 'react-dropzone';
-import { jobsApi, teamsApi, parseJdFile, type CreateJobData, type ParsedJD } from '@/lib/api';
+import { jobsApi, teamsApi, parseJdFile, type CreateJobData, type ParsedJD, type ScoringCriteria } from '@/lib/api';
 import { useUserContext } from '@/lib/context/UserContext';
 import { toast } from 'sonner';
 import Link from 'next/link';
+
+const DEFAULT_SCORING: ScoringCriteria = {
+  pass_threshold: 70,
+  review_threshold: 50,
+  weights: { technical_skills: 35, experience: 30, education: 20, soft_skills: 15 },
+};
 
 export default function NewJobPage() {
   const [form, setForm] = useState<CreateJobData>({
     job_title: '', company_name: '', job_description_text: '', required_skills: [], assigned_team_id: null,
   });
+  const [scoring, setScoring] = useState<ScoringCriteria>(DEFAULT_SCORING);
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
   const [skillInput, setSkillInput] = useState('');
   const [isParsing, setIsParsing] = useState(false);
@@ -40,8 +47,8 @@ export default function NewJobPage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: CreateJobData) => {
-      const res = await jobsApi.create(data);
-      // Set multi-team assignments after job created
+      const payload = { ...data, scoring_criteria: scoring };
+      const res = await jobsApi.create(payload);
       if (selectedTeamIds.size > 0) {
         await jobsApi.setTeams(res.job.id, Array.from(selectedTeamIds));
       }
@@ -386,6 +393,76 @@ export default function NewJobPage() {
           ) : (
             <p style={{ color: 'var(--text-faint)', fontSize: '0.8rem' }}>No skills added yet</p>
           )}
+        </div>
+
+        {/* Scoring Criteria */}
+        <div style={{
+          background: 'var(--bg-card)', border: '1px solid rgba(99,102,241,0.25)',
+          borderRadius: '1rem', padding: '1.75rem', marginBottom: '1.5rem', position: 'relative', overflow: 'hidden',
+        }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2px', background: 'linear-gradient(90deg, #6366f1, #8b5cf6)' }} />
+          <h2 style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: '0.25rem', fontSize: '1rem' }}>🎯 Scoring Criteria</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.5rem' }}>
+            Define how AI should score resumes for this job. The AI uses these thresholds and weights every time.
+          </p>
+
+          {/* Thresholds */}
+          <div style={{ marginBottom: '1.5rem' }}>
+            <p style={{ color: '#94a3b8', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Pass / Review / Fail Thresholds</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '0.75rem' }}>
+              <div>
+                <label style={{ color: '#94a3b8', fontSize: '0.78rem', display: 'block', marginBottom: '0.4rem' }}>Pass Threshold (score ≥)</label>
+                <input type="number" min={1} max={100}
+                  value={scoring.pass_threshold}
+                  onChange={e => setScoring(s => ({ ...s, pass_threshold: Math.max(1, Math.min(100, +e.target.value)) }))}
+                  style={{ width: '100%', padding: '0.6rem 0.875rem', borderRadius: '0.5rem', background: '#0a0f1e', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box' as const }} />
+              </div>
+              <div>
+                <label style={{ color: '#94a3b8', fontSize: '0.78rem', display: 'block', marginBottom: '0.4rem' }}>Review Threshold (score ≥)</label>
+                <input type="number" min={1} max={99}
+                  value={scoring.review_threshold}
+                  onChange={e => setScoring(s => ({ ...s, review_threshold: Math.max(1, Math.min(99, +e.target.value)) }))}
+                  style={{ width: '100%', padding: '0.6rem 0.875rem', borderRadius: '0.5rem', background: '#0a0f1e', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box' as const }} />
+              </div>
+            </div>
+            {/* Live preview */}
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' as const }}>
+              <span style={{ padding: '0.25rem 0.75rem', borderRadius: '999px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', fontSize: '0.75rem', fontWeight: 600 }}>✅ PASS ≥ {scoring.pass_threshold}</span>
+              <span style={{ padding: '0.25rem 0.75rem', borderRadius: '999px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '0.75rem', fontWeight: 600 }}>🔶 REVIEW ≥ {scoring.review_threshold}</span>
+              <span style={{ padding: '0.25rem 0.75rem', borderRadius: '999px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', fontSize: '0.75rem', fontWeight: 600 }}>❌ FAIL &lt; {scoring.review_threshold}</span>
+            </div>
+          </div>
+
+          {/* Weightages */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <p style={{ color: '#94a3b8', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Dimension Weightages</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                {(() => {
+                  const total = Object.values(scoring.weights).reduce((a, b) => a + b, 0);
+                  return <span style={{ fontSize: '0.78rem', fontWeight: 700, color: total === 100 ? '#22c55e' : '#ef4444' }}>Total: {total}% {total === 100 ? '✓' : '(must = 100%)'}</span>;
+                })()}
+                <button type="button" onClick={() => setScoring(s => ({ ...s, weights: { technical_skills: 35, experience: 30, education: 20, soft_skills: 15 } }))} style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem', borderRadius: '0.3rem', background: 'rgba(100,116,139,0.1)', border: '1px solid rgba(100,116,139,0.25)', color: '#64748b', cursor: 'pointer' }}>↺ Reset</button>
+              </div>
+            </div>
+            {([
+              { key: 'technical_skills', label: '⚙️ Technical & Domain Skills', color: '#6366f1' },
+              { key: 'experience', label: '💼 Professional Experience', color: '#8b5cf6' },
+              { key: 'education', label: '🎓 Education & Certifications', color: '#06b6d4' },
+              { key: 'soft_skills', label: '🤝 Communication & Soft Skills', color: '#f59e0b' },
+            ] as const).map(({ key, label, color }) => (
+              <div key={key} style={{ marginBottom: '0.875rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                  <label style={{ color: '#94a3b8', fontSize: '0.8rem' }}>{label}</label>
+                  <span style={{ color, fontWeight: 700, fontSize: '0.85rem', minWidth: '3rem', textAlign: 'right' as const }}>{scoring.weights[key]}%</span>
+                </div>
+                <input type="range" min={0} max={100}
+                  value={scoring.weights[key]}
+                  onChange={e => setScoring(s => ({ ...s, weights: { ...s.weights, [key]: +e.target.value } }))}
+                  style={{ width: '100%', accentColor: color }} />
+              </div>
+            ))}
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: '1rem' }}>
