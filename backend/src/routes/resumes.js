@@ -32,27 +32,45 @@ const withTimeout = (promise, ms) =>
 
 /**
  * Check if the user has access to upload to this job.
- * admin: any job
- * manager: jobs in their teams or created by them
- * recruiter: jobs in teams they belong to
- * tl: jobs in their team (read-only; TLs don't upload)
+ * admin   → always
+ * manager → created the job OR manages any team assigned to the job
+ * tl      → their team is assigned to the job (via job_teams)
+ * recruiter → they are a member of any team assigned to the job
  */
 async function canUploadToJob(user, job) {
   const { role, id: userId } = user;
+  const jobId = job.id;
+
   if (role === 'admin') return true;
 
   if (role === 'manager') {
     if (job.created_by === userId) return true;
-    if (!job.assigned_team_id) return false;
-    const { data: team } = await supabase
-      .from('teams').select('id').eq('id', job.assigned_team_id).eq('manager_id', userId).single();
-    return !!team;
+    // Check via job_teams (multi-team)
+    const { data: jt } = await supabase
+      .from('job_teams').select('team_id, teams!job_teams_team_id_fkey(manager_id)')
+      .eq('job_id', jobId);
+    return (jt || []).some(r => r.teams?.manager_id === userId);
+  }
+
+  if (role === 'tl') {
+    // TL can upload if their team is assigned to this job
+    const { data: myTeams } = await supabase.from('teams').select('id').eq('tl_id', userId);
+    if (!myTeams?.length) return false;
+    const myTeamIds = myTeams.map(t => t.id);
+    const { data: jt } = await supabase.from('job_teams').select('team_id').eq('job_id', jobId).in('team_id', myTeamIds);
+    return !!(jt?.length);
   }
 
   if (role === 'recruiter') {
-    if (!job.assigned_team_id) return false;
-    const { data: mem } = await supabase
-      .from('team_members').select('id').eq('team_id', job.assigned_team_id).eq('user_id', userId).single();
+    // Recruiter must be a member of any team assigned to this job
+    const { data: jt } = await supabase.from('job_teams').select('team_id').eq('job_id', jobId);
+    const teamIds = (jt || []).map(r => r.team_id);
+    if (!teamIds.length) {
+      // Fallback: legacy single-team field
+      if (!job.assigned_team_id) return false;
+      teamIds.push(job.assigned_team_id);
+    }
+    const { data: mem } = await supabase.from('team_members').select('id').eq('user_id', userId).in('team_id', teamIds).limit(1).single();
     return !!mem;
   }
 
