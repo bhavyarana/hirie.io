@@ -32,7 +32,9 @@ const ROLE_NAV: Record<string, { href: string; icon: string; label: string }[]> 
     { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
     { href: '/dashboard/my-teams', icon: '👥', label: 'My Teams' },
     { href: '/dashboard/jobs', icon: '💼', label: 'Jobs' },
+    { href: '/dashboard/candidates', icon: '📋', label: 'My Candidates' },
     { href: '/dashboard/candidates/search', icon: '🔍', label: 'Talent Pool' },
+    { href: '/dashboard/analytics', icon: '📊', label: 'Analytics' },
     { href: '/dashboard/settings', icon: '⚙️', label: 'Settings' },
   ],
   recruiter: [
@@ -40,6 +42,7 @@ const ROLE_NAV: Record<string, { href: string; icon: string; label: string }[]> 
     { href: '/dashboard/jobs', icon: '💼', label: 'Assigned Jobs' },
     { href: '/dashboard/candidates', icon: '👥', label: 'My Candidates' },
     { href: '/dashboard/candidates/search', icon: '🔍', label: 'Talent Pool' },
+    { href: '/dashboard/analytics', icon: '📊', label: 'Analytics' },
     { href: '/dashboard/settings', icon: '⚙️', label: 'Settings' },
   ],
 };

@@ -64,7 +64,7 @@ export default function CandidatesPage() {
       <div style={{ marginBottom: '2rem' }}>
         <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#e2e8f0' }}>Candidates</h1>
         <p style={{ color: '#64748b', marginTop: '0.25rem' }}>
-          {role === 'recruiter' ? 'Candidates you uploaded' : 'Candidate pipeline across jobs'}
+          {role === 'recruiter' ? 'Candidates you uploaded' : role === 'tl' ? 'Candidates across your team\'s jobs' : 'Candidate pipeline across jobs'}
         </p>
       </div>
 

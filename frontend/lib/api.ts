@@ -98,7 +98,7 @@ export const jobAssignmentsApi = {
     apiFetch<{ assignments: JobAssignment[] }>('/api/job-assignments/bulk', { method: 'POST', body: JSON.stringify({ recruiter_id: recruiterId, job_ids: jobIds }) }),
 };
 
-// ─── Candidates ─────────────────────────────────────────────────────────────
+// ─── Analytics ───────────────────────────────────────────────────────────────
 export const candidatesApi = {
   list: (jobId: string, params?: { status?: string }) => {
     const q = params?.status ? `?status=${params.status}` : '';
@@ -154,8 +154,10 @@ export async function uploadResumes(jobId: string, files: File[], onProgress?: (
 }
 
 // ─── Analytics ──────────────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const analyticsApi = {
   get: (jobId: string) => apiFetch<AnalyticsData>(`/api/jobs/${jobId}/analytics`),
+  dashboard: () => apiFetch<Record<string, any>>('/api/analytics/dashboard'),
 };
 
 // ─── Parse JD ───────────────────────────────────────────────────────────────
