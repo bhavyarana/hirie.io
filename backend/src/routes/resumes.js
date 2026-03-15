@@ -263,6 +263,76 @@ router.get('/jobs/:id/candidates', authMiddleware, async (req, res) => {
   res.json({ candidates: filtered, total: filtered.length });
 });
 
+// GET /api/candidates/search — keyword + filter search across all processed candidates (all roles)
+router.get('/candidates/search', authMiddleware, async (req, res) => {
+  const { q = '', min_exp, max_exp, score_status, page = 1, limit = 24 } = req.query;
+  const { role, id: userId } = req.user;
+  const offset = (parseInt(page) - 1) * parseInt(limit);
+
+  try {
+    let query = supabase
+      .from('candidates')
+      .select(`
+        id, name, email, phone, resume_file_path, resume_file_name,
+        extracted_skills, extracted_titles, experience_years, current_location,
+        processing_status, created_at,
+        job:jobs!candidates_job_id_fkey(id, job_title, company_name),
+        resume_scores(score, status, matched_skills, summary)
+      `, { count: 'exact' })
+      .eq('processing_status', 'completed')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + parseInt(limit) - 1);
+
+    // Recruiters only see their own uploads
+    if (role === 'recruiter') query = query.eq('recruiter_id', userId);
+
+    // Keyword — match name OR skills array OR titles array
+    if (q && q.trim()) {
+      const kw = q.trim();
+      query = query.or(`name.ilike.%${kw}%,extracted_skills.cs.{${kw}},extracted_titles.cs.{${kw}}`);
+    }
+
+    // Experience filter
+    if (min_exp) query = query.gte('experience_years', parseFloat(min_exp));
+    if (max_exp) query = query.lte('experience_years', parseFloat(max_exp));
+
+    const { data, error, count } = await query;
+    if (error) {
+      logger.error('Candidate search error:', error);
+      return res.status(500).json({ error: 'Search failed', detail: error.message });
+    }
+
+    let results = (data || []).map(c => {
+      const s = c.resume_scores?.[0];
+      return {
+        id: c.id, name: c.name, email: c.email, phone: c.phone,
+        resume_file_path: c.resume_file_path, resume_file_name: c.resume_file_name,
+        extracted_skills: c.extracted_skills || [],
+        extracted_titles: c.extracted_titles || [],
+        experience_years: c.experience_years,
+        current_location: c.current_location,
+        processing_status: c.processing_status,
+        created_at: c.created_at,
+        job: c.job,
+        score: s?.score ?? null,
+        score_status: s?.status ?? null,
+        matched_skills: s?.matched_skills ?? [],
+        summary: s?.summary ?? null,
+      };
+    });
+
+    // Filter by score_status in JS (joined table)
+    if (score_status && score_status !== 'all') {
+      results = results.filter(r => r.score_status === score_status);
+    }
+
+    res.json({ candidates: results, total: count || 0, page: parseInt(page), limit: parseInt(limit) });
+  } catch (err) {
+    logger.error('Candidate search error:', err);
+    res.status(500).json({ error: 'Unexpected error during search' });
+  }
+});
+
 // GET /api/candidates/:id
 router.get('/candidates/:id', authMiddleware, async (req, res) => {
   const { role, id: userId } = req.user;

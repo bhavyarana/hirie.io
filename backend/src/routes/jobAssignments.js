@@ -7,23 +7,22 @@ const logger = require('../config/logger');
 
 router.use(authMiddleware);
 
-// GET /api/job-assignments?recruiter_id=X  — list all job assignments for a recruiter
+// GET /api/job-assignments?recruiter_id=X&job_id=Y  — list job assignments
 router.get('/', async (req, res) => {
-  const { recruiter_id } = req.query;
+  const { recruiter_id, job_id } = req.query;
   const { role, id: userId } = req.user;
 
   let query = supabase
     .from('job_recruiter_assignments')
     .select('*, job:jobs(id, job_title, company_name, status), recruiter:users!job_recruiter_assignments_recruiter_id_fkey(id, name, email)');
 
-  // TL can only see assignments they made, admin/manager see all
+  // TL can only see assignments they made, admin/manager/recruiter see all
   if (role === 'tl') {
     query = query.eq('assigned_by', userId);
   }
 
-  if (recruiter_id) {
-    query = query.eq('recruiter_id', recruiter_id);
-  }
+  if (recruiter_id) query = query.eq('recruiter_id', recruiter_id);
+  if (job_id) query = query.eq('job_id', job_id);
 
   const { data, error } = await query.order('assigned_at', { ascending: false });
   if (error) {

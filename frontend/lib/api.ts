@@ -83,9 +83,12 @@ export const jobsApi = {
 
 // ─── Job Assignments (TL assigns jobs to recruiters) ────────────────────────
 export const jobAssignmentsApi = {
-  list: (recruiterId?: string) => {
-    const q = recruiterId ? `?recruiter_id=${recruiterId}` : '';
-    return apiFetch<{ assignments: JobAssignment[] }>(`/api/job-assignments${q}`);
+  list: (params?: { recruiterId?: string; jobId?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.recruiterId) q.set('recruiter_id', params.recruiterId);
+    if (params?.jobId) q.set('job_id', params.jobId);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    return apiFetch<{ assignments: JobAssignment[] }>(`/api/job-assignments${qs}`);
   },
   assign: (jobId: string, recruiterId: string) =>
     apiFetch<{ assignment: JobAssignment }>('/api/job-assignments', { method: 'POST', body: JSON.stringify({ job_id: jobId, recruiter_id: recruiterId }) }),
@@ -104,6 +107,18 @@ export const candidatesApi = {
   get: (id: string) => apiFetch<{ candidate: CandidateDetail }>(`/api/candidates/${id}`),
   updateStatus: (id: string, status: string) =>
     apiFetch<{ candidate: Candidate }>(`/api/candidates/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  search: (params: { q?: string; minExp?: number; maxExp?: number; scoreStatus?: string; page?: number; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params.q) q.set('q', params.q);
+    if (params.minExp != null) q.set('min_exp', String(params.minExp));
+    if (params.maxExp != null) q.set('max_exp', String(params.maxExp));
+    if (params.scoreStatus) q.set('score_status', params.scoreStatus);
+    if (params.page) q.set('page', String(params.page));
+    if (params.limit) q.set('limit', String(params.limit));
+    return apiFetch<{ candidates: CandidateSearchResult[]; total: number; page: number; limit: number }>(
+      `/api/candidates/search${q.toString() ? `?${q.toString()}` : ''}`
+    );
+  },
 };
 
 // ─── Resume upload ─────────────────────────────────────────────────────────
@@ -324,6 +339,26 @@ export interface CandidateDetail extends Candidate {
     summary: string;
   } | null;
   resume_download_url: string | null;
+}
+
+export interface CandidateSearchResult {
+  id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  resume_file_path: string;
+  resume_file_name: string;
+  extracted_skills: string[];
+  extracted_titles: string[];
+  experience_years: number | null;
+  current_location: string | null;
+  processing_status: string;
+  created_at: string;
+  job: { id: string; job_title: string; company_name: string } | null;
+  score: number | null;
+  score_status: 'pass' | 'review' | 'fail' | null;
+  matched_skills: string[];
+  summary: string | null;
 }
 
 export interface AnalyticsData {

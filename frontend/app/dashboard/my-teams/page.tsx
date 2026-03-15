@@ -78,7 +78,12 @@ export default function MyTeamsPage() {
                       </span>
                       {team.tl && (
                         <span style={{ color: '#64748b' }}>
-                          TL: <span style={{ color: '#94a3b8' }}>{team.tl.name || team.tl.email}</span>
+                          👤 TL: <span style={{ color: '#94a3b8' }}>{team.tl.name || team.tl.email}</span>
+                        </span>
+                      )}
+                      {team.manager && (
+                        <span style={{ color: '#64748b' }}>
+                          👤 Manager: <span style={{ color: '#94a3b8' }}>{team.manager.name || team.manager.email}</span>
                         </span>
                       )}
                     </div>
@@ -92,10 +97,10 @@ export default function MyTeamsPage() {
                 </div>
 
                 {/* Quick stat bar */}
-                <div style={{ borderTop: '1px solid #1e2d4a', padding: '0.625rem 1.5rem', background: 'rgba(15,23,42,0.4)', display: 'flex', gap: '2rem', fontSize: '0.75rem', color: '#475569' }}>
+                {/* <div style={{ borderTop: '1px solid #1e2d4a', padding: '0.625rem 1.5rem', background: 'rgba(15,23,42,0.4)', display: 'flex', gap: '2rem', fontSize: '0.75rem', color: '#475569' }}>
                   <span>👤 Manager: {team.manager?.name || team.manager?.email || '—'}</span>
                   <span>Click <strong style={{ color: '#6366f1' }}>Manage Team</strong> to assign members & jobs</span>
-                </div>
+                </div> */}
               </div>
             );
           })}

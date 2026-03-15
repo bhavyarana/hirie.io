@@ -4,7 +4,7 @@ const redisConnection = require('../config/redis');
 const supabase = require('../config/supabase');
 const { downloadFile } = require('../services/storageService');
 const { extractResumeText } = require('../services/parserService');
-const { scoreResume, getPlaceholderScore } = require('../services/openaiService');
+const { scoreResume, getPlaceholderScore, extractCandidateProfile } = require('../services/openaiService');
 const logger = require('../config/logger');
 
 const CONCURRENCY = parseInt(process.env.WORKER_CONCURRENCY || '5');
@@ -49,16 +49,29 @@ const worker = new Worker(
 
     logger.info(`[Worker] Extracted ${text.length} chars — candidate: ${JSON.stringify(basicInfo)}`);
 
-    // Step 4: Update candidate with extracted info
-    await supabase
-      .from('candidates')
-      .update({
+    // Step 4: Update candidate with extracted info + run talent profile extraction in parallel
+    const [profileResult] = await Promise.all([
+      // Extract talent profile for search indexing (fire-and-forget style, never throws)
+      extractCandidateProfile(text).catch(() => ({ skills: [], titles: [], experience_years: null, location: null })),
+      // Update basic candidate info
+      supabase.from('candidates').update({
         name: basicInfo.name,
         email: basicInfo.email,
         phone: basicInfo.phone,
         raw_text: text,
-      })
-      .eq('id', candidateId);
+      }).eq('id', candidateId),
+    ]);
+
+    // Persist extracted talent profile for search
+    if (profileResult.skills.length > 0 || profileResult.titles.length > 0 || profileResult.experience_years != null) {
+      await supabase.from('candidates').update({
+        extracted_skills: profileResult.skills,
+        extracted_titles: profileResult.titles,
+        experience_years: profileResult.experience_years,
+        current_location: profileResult.location,
+      }).eq('id', candidateId);
+      logger.info(`[Worker] Profile extracted: ${profileResult.skills.length} skills, ${profileResult.titles.length} titles, ${profileResult.experience_years}yr exp`);
+    }
 
     // Step 5: Score with Mistral AI — gracefully degrade on ANY AI error
     let scoreResult;

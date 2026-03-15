@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDropzone } from 'react-dropzone';
 import { candidatesApi, analyticsApi, uploadResumes, exportCSV, type Candidate } from '@/lib/api';
-import { jobsApi } from '@/lib/api';
+import { jobsApi, jobAssignmentsApi, type JobAssignment } from '@/lib/api';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
@@ -60,6 +60,13 @@ export default function JobDetailPage({ params }: Props) {
     queryKey: ['analytics', jobId], queryFn: () => analyticsApi.get(jobId),
     enabled: activeTab === 'analytics',
   });
+
+  const { data: assignmentsData } = useQuery({
+    queryKey: ['job-assignments', jobId],
+    queryFn: () => jobAssignmentsApi.list({ jobId }),
+  });
+
+  const jobAssignments: JobAssignment[] = assignmentsData?.assignments ?? [];
 
   const job = jobData?.job;
   const candidates: Candidate[] = candidatesData?.candidates ?? [];
@@ -119,6 +126,47 @@ export default function JobDetailPage({ params }: Props) {
           cursor: 'pointer', fontSize: '0.875rem',
         }}>📥 Export CSV</button>
       </div>
+
+      {/* Team & Recruiter info panel */}
+      {job?.teams && job.teams.length > 0 && (
+        <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', padding: '1.25rem 1.5rem', marginBottom: '1.5rem', display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+
+          {/* Assigned Teams */}
+          <div style={{ flex: 1, minWidth: '180px' }}>
+            <p style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.625rem' }}>Assigned Teams</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
+              {job.teams.map(t => (
+                <span key={t.id} style={{ padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.78rem', background: 'rgba(99,102,241,0.1)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.25)' }}>
+                  🏢 {t.name}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div style={{ width: '1px', background: '#1e2d4a', flexShrink: 0 }} />
+
+          {/* Assigned Recruiters */}
+          <div style={{ flex: 1, minWidth: '200px' }}>
+            <p style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.625rem' }}>Assigned Recruiters</p>
+            {jobAssignments.length === 0 ? (
+              <span style={{ color: '#475569', fontSize: '0.8rem' }}>No recruiter assigned yet</span>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                {jobAssignments.map(a => (
+                  <div key={a.recruiter_id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#0a0f1e', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '0.5rem', padding: '0.375rem 0.75rem' }}>
+                    <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
+                    <div>
+                      <span style={{ color: '#e2e8f0', fontSize: '0.825rem', fontWeight: 500 }}>{a.recruiter?.name || a.recruiter?.email}</span>
+                      {a.recruiter?.name && <span style={{ color: '#475569', fontSize: '0.72rem', display: 'block' }}>{a.recruiter.email}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Upload Dropzone */}
       <div {...getRootProps()} style={{

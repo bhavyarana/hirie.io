@@ -9,9 +9,6 @@ function getStatus(score) {
 
 /**
  * Score a resume against a job description using Mistral AI.
- * Returns structured scoring data.
- * If Mistral is unavailable (quota, network etc.), throws an error
- * with `isQuotaError: true` so the worker can degrade gracefully.
  */
 async function scoreResume(resumeText, jobDescription, jobTitle) {
   const prompt = `You are an expert technical recruiter. Analyze this resume against the job description and return ONLY a valid JSON object.
@@ -77,8 +74,53 @@ Scoring: 70-100 = strong match, 50-69 = partial match, 0-49 = weak match.`;
 }
 
 /**
+ * Extract a talent profile from raw resume text (for candidate search indexing).
+ * Returns { skills[], titles[], experience_years, location }
+ * Gracefully returns empty data on any AI failure — never blocks the pipeline.
+ */
+async function extractCandidateProfile(resumeText) {
+  const prompt = `You are a resume parser. Extract key information from this resume and return ONLY a valid JSON object.
+
+RESUME:
+${resumeText.slice(0, 4000)}
+
+Return ONLY this JSON — no extra text, no markdown:
+{
+  "skills": [<list of technical and professional skills, max 30 items>],
+  "titles": [<list of job titles and roles mentioned or inferred, max 10 items>],
+  "experience_years": <total years of professional experience as a number, or null if unclear>,
+  "location": "<city or region if mentioned, or null>"
+}`;
+
+  try {
+    const response = await mistral.chat.complete({
+      model: process.env.MISTRAL_MODEL || 'mistral-small-latest',
+      messages: [
+        { role: 'system', content: 'You are a resume parser AI. Always respond with valid JSON only, no markdown.' },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.1,
+      responseFormat: { type: 'json_object' },
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) throw new Error('Empty response');
+
+    const parsed = JSON.parse(content);
+    return {
+      skills: Array.isArray(parsed.skills) ? parsed.skills.slice(0, 30).map(s => String(s).trim()).filter(Boolean) : [],
+      titles: Array.isArray(parsed.titles) ? parsed.titles.slice(0, 10).map(t => String(t).trim()).filter(Boolean) : [],
+      experience_years: parsed.experience_years != null ? (parseFloat(parsed.experience_years) || null) : null,
+      location: parsed.location ? String(parsed.location).trim() : null,
+    };
+  } catch (err) {
+    logger.warn(`[extractCandidateProfile] Failed: ${err.message} — using empty profile`);
+    return { skills: [], titles: [], experience_years: null, location: null };
+  }
+}
+
+/**
  * Placeholder score when Mistral is unavailable.
- * Resume text is still parsed — only AI scoring is skipped.
  */
 function getPlaceholderScore() {
   return {
@@ -95,4 +137,4 @@ function getPlaceholderScore() {
   };
 }
 
-module.exports = { scoreResume, getStatus, getPlaceholderScore };
+module.exports = { scoreResume, getStatus, getPlaceholderScore, extractCandidateProfile };
