@@ -398,4 +398,42 @@ router.patch('/candidates/:id/status', authMiddleware, requireRole('admin', 'man
   res.json({ candidate: data });
 });
 
+// POST /api/candidates/:id/reprocess — re-queue an already-processed candidate (admin/manager/tl)
+router.post('/candidates/:id/reprocess', authMiddleware, async (req, res) => {
+  const candidateId = req.params.id;
+
+  const { data: candidate, error } = await supabase
+    .from('candidates')
+    .select('*, job:jobs!candidates_job_id_fkey(id, job_title, job_description_text)')
+    .eq('id', candidateId)
+    .single();
+
+  if (error || !candidate) {
+    return res.status(404).json({ error: 'Candidate not found' });
+  }
+
+  // Reset processing state
+  await supabase.from('candidates').update({
+    processing_status: 'pending',
+    name: null,
+    email: null,
+    phone: null,
+    error_message: null,
+  }).eq('id', candidateId);
+
+  // Re-queue
+  await resumeQueue.add('process-resume', {
+    candidateId: candidate.id,
+    jobId: candidate.job_id,
+    recruiterId: candidate.recruiter_id,
+    storagePath: candidate.resume_file_path,
+    fileName: candidate.resume_file_name,
+    jobDescription: candidate.job?.job_description_text || '',
+    jobTitle: candidate.job?.job_title || '',
+  }, { attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 100, removeOnFail: 50 });
+
+  logger.info(`[Reprocess] Queued candidate ${candidateId} for re-processing`);
+  res.json({ message: 'Re-queued for processing', candidateId });
+});
+
 module.exports = router;

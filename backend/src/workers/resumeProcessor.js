@@ -53,12 +53,11 @@ const worker = new Worker(
     const [profileResult] = await Promise.all([
       // Extract talent profile for search indexing (fire-and-forget style, never throws)
       extractCandidateProfile(text).catch(() => ({ skills: [], titles: [], experience_years: null, location: null })),
-      // Update basic candidate info
+      // Update basic candidate info (name, email, phone from parser)
       supabase.from('candidates').update({
         name: basicInfo.name,
         email: basicInfo.email,
         phone: basicInfo.phone,
-        raw_text: text,
       }).eq('id', candidateId),
     ]);
 
@@ -87,12 +86,13 @@ const worker = new Worker(
     }
 
 
-    // Step 6: Save score
+    // Step 6: Save score — delete existing then insert fresh (no unique constraint on candidate_id)
+    await supabase.from('resume_scores').delete().eq('candidate_id', candidateId);
+
     const { error: scoreError } = await supabase
       .from('resume_scores')
-      .upsert({
+      .insert({
         candidate_id: candidateId,
-        job_id: jobId,
         score: scoreResult.score,
         status: scoreResult.status,
         strengths: scoreResult.strengths,
@@ -102,8 +102,7 @@ const worker = new Worker(
         experience_match: scoreResult.experience_match,
         education_match: scoreResult.education_match,
         summary: scoreResult.summary,
-        raw_response: scoreResult.raw_response,
-      }, { onConflict: 'candidate_id' });
+      });
 
     if (scoreError) {
       throw new Error(`Failed to save score: ${scoreError.message}`);

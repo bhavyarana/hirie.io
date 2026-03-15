@@ -241,7 +241,7 @@ export default function JobDetailPage({ params }: Props) {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: 'rgba(30,45,74,0.3)' }}>
-                      {['Candidate', 'Contact', 'Score', 'Status', 'Processing', 'Action'].map(h => (
+                      {['Resume File', 'Name / Contact', 'Score', 'Status', 'Processing', 'Action'].map(h => (
                         <th key={h} style={{ padding: '0.75rem 1.25rem', textAlign: 'left', color: '#64748b', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -252,15 +252,20 @@ export default function JobDetailPage({ params }: Props) {
                         onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(99,102,241,0.04)'}
                         onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}>
                         <td style={{ padding: '1rem 1.25rem' }}>
-                          <p style={{ color: '#e2e8f0', fontWeight: 500, fontSize: '0.875rem' }}>
-                            {c.name || c.resume_file_name}
-                          </p>
-                          <p style={{ color: '#64748b', fontSize: '0.75rem' }}>{c.resume_file_name}</p>
+                          <p style={{ color: '#94a3b8', fontWeight: 500, fontSize: '0.8rem' }}>{c.resume_file_name}</p>
                         </td>
-                        <td style={{ padding: '1rem 1.25rem' }}>
-                          {c.email && <p style={{ color: '#94a3b8', fontSize: '0.8rem' }}>{c.email}</p>}
-                          {c.phone && <p style={{ color: '#64748b', fontSize: '0.75rem' }}>{c.phone}</p>}
-                          {!c.email && !c.phone && <span style={{ color: '#475569', fontSize: '0.75rem' }}>—</span>}
+                        <td style={{ padding: '1rem 1.25rem', minWidth: '180px' }}>
+                          {c.name ? (
+                            <>
+                              <p style={{ color: '#e2e8f0', fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.2rem' }}>{c.name}</p>
+                              {c.email && <p style={{ color: '#94a3b8', fontSize: '0.75rem' }}>✉️ {c.email}</p>}
+                              {c.phone && <p style={{ color: '#64748b', fontSize: '0.72rem' }}>📞 {c.phone}</p>}
+                            </>
+                          ) : c.processing_status === 'pending' || c.processing_status === 'processing' ? (
+                            <span style={{ color: '#6366f1', fontSize: '0.75rem' }}>⟳ Extracting…</span>
+                          ) : (
+                            <span style={{ color: '#475569', fontSize: '0.75rem' }}>— (re-upload to extract)</span>
+                          )}
                         </td>
                         <td style={{ padding: '1rem 1.25rem' }}>
                           {c.score !== null ? (
@@ -280,11 +285,26 @@ export default function JobDetailPage({ params }: Props) {
                           <StatusBadge status={c.processing_status} />
                         </td>
                         <td style={{ padding: '1rem 1.25rem' }}>
-                          <Link href={`/dashboard/candidates/${c.id}`} style={{
-                            color: '#6366f1', fontSize: '0.8rem', textDecoration: 'none',
-                            padding: '0.375rem 0.75rem', border: '1px solid rgba(99,102,241,0.3)',
-                            borderRadius: '0.375rem', background: 'rgba(99,102,241,0.05)',
-                          }}>View →</Link>
+                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <Link href={`/dashboard/candidates/${c.id}`} style={{
+                              color: '#6366f1', fontSize: '0.8rem', textDecoration: 'none',
+                              padding: '0.375rem 0.75rem', border: '1px solid rgba(99,102,241,0.3)',
+                              borderRadius: '0.375rem', background: 'rgba(99,102,241,0.05)',
+                            }}>View →</Link>
+                            {!c.name && c.processing_status === 'completed' && (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await candidatesApi.reprocess(c.id);
+                                    toast.success('Re-queued for extraction');
+                                    queryClient.invalidateQueries({ queryKey: ['candidates', jobId] });
+                                  } catch { toast.error('Failed to re-queue'); }
+                                }}
+                                style={{ fontSize: '0.72rem', padding: '0.3rem 0.6rem', borderRadius: '0.375rem', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', color: '#f59e0b', cursor: 'pointer' }}>
+                                ↻ Re-extract
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}

@@ -119,6 +119,8 @@ export const candidatesApi = {
       `/api/candidates/search${q.toString() ? `?${q.toString()}` : ''}`
     );
   },
+  reprocess: (id: string) =>
+    apiFetch<{ message: string; candidateId: string }>(`/api/candidates/${id}/reprocess`, { method: 'POST' }),
 };
 
 // ─── Resume upload ─────────────────────────────────────────────────────────
