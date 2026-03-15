@@ -102,9 +102,18 @@ export default function CandidateDetailPage({ params }: Props) {
               Applied for: <span style={{ color: '#a5b4fc' }}>{candidate.job.job_title}</span> at {candidate.job.company_name}
             </p>
           )}
-          <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
             {candidate.email && <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>✉️ {candidate.email}</span>}
             {candidate.phone && <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>📞 {candidate.phone}</span>}
+            {candidate.recruiter_name && (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                padding: '0.2rem 0.625rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 500,
+                background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', color: '#a5b4fc',
+              }}>
+                👤 Added by <strong style={{ color: '#e2e8f0' }}>{candidate.recruiter_name}</strong>
+              </span>
+            )}
           </div>
         </div>
 
