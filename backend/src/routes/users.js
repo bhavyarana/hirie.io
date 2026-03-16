@@ -118,10 +118,18 @@ router.delete('/:id', requireRole('admin'), async (req, res) => {
   if (req.params.id === req.user.id) {
     return res.status(400).json({ error: 'Cannot delete your own account' });
   }
-  const { error } = await supabase.from('users').delete().eq('id', req.params.id);
-  if (error) {
-    return res.status(500).json({ error: 'Failed to delete user' });
+
+  // Delete from Supabase Auth first — this frees the email so it can be re-used
+  const { error: authErr } = await supabase.auth.admin.deleteUser(req.params.id);
+  if (authErr) {
+    logger.error('Auth delete error:', authErr);
+    return res.status(500).json({ error: 'Failed to delete user from auth: ' + authErr.message });
   }
+
+  // Also remove from users table (in case no cascade is set up)
+  await supabase.from('users').delete().eq('id', req.params.id);
+
+  logger.info(`User ${req.params.id} deleted by admin ${req.user.id}`);
   res.json({ message: 'User deleted' });
 });
 

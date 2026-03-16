@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ResumeFlow — Features & Role Access</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --indigo: #6366f1;
+      --purple: #8b5cf6;
+      --lavender: #a78bfa;
+      --bg: #060b14;
+      --card: #0d1526;
+      --border: #1a2840;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --faint: #475569;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 3rem 2rem;
+      line-height: 1.6;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    /* ── Header ── */
+    .header {
+      text-align: center;
+      margin-bottom: 3rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.5rem;
+    }
+    .logo span { color: var(--indigo); }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.3rem 0.9rem;
+      border-radius: 999px;
+      background: rgba(99,102,241,0.1);
+      border: 1px solid rgba(99,102,241,0.25);
+      color: #a5b4fc;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--indigo); display: inline-block; }
+    .subtitle { color: var(--muted); font-size: 0.9rem; }
+
+    /* ── Section titles ── */
+    .section-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--indigo);
+      margin-bottom: 0.6rem;
+    }
+    .section-title {
+      font-size: 1.5rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+      background: linear-gradient(135deg, #6366f1, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .section-desc { color: var(--muted); font-size: 0.85rem; margin-bottom: 1.75rem; }
+
+    section { margin-bottom: 3rem; }
+
+    /* ── Feature grid ── */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 1rem;
+    }
+    .feature-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 0.875rem;
+      padding: 1.125rem 1.25rem;
+    }
+    .feature-icon {
+      width: 36px; height: 36px;
+      border-radius: 0.5rem;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem;
+      margin-bottom: 0.75rem;
+    }
+    .feature-card h3 { font-size: 0.85rem; font-weight: 600; color: var(--text); margin-bottom: 0.3rem; }
+    .feature-card p  { font-size: 0.75rem; color: var(--faint); line-height: 1.55; }
+    .feature-num {
+      display: inline-block;
+      font-size: 0.65rem; font-weight: 700;
+      color: var(--indigo);
+      background: rgba(99,102,241,0.1);
+      border-radius: 4px;
+      padding: 0.1rem 0.35rem;
+      margin-bottom: 0.4rem;
+    }
+
+    /* ── Role cards ── */
+    .role-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1.25rem;
+    }
+    .role-card {
+      background: var(--card);
+      border-radius: 1rem;
+      padding: 1.5rem;
+      border-width: 1px;
+      border-style: solid;
+    }
+    .role-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+      padding-bottom: 0.875rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .role-emoji { font-size: 1.75rem; }
+    .role-name  { font-size: 1rem; font-weight: 800; }
+    .role-tag   { font-size: 0.65rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; opacity: 0.7; }
+
+    .access-list { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
+    .access-item { display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.78rem; color: var(--muted); }
+    .check { font-size: 0.75rem; flex-shrink: 0; margin-top: 0.05rem; }
+    .access-item strong { color: var(--text); font-weight: 600; }
+
+    /* ── Scope box ── */
+    .scope-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 0.875rem;
+      padding: 1.5rem 2rem;
+      margin-top: 2rem;
+    }
+    .scope-box h3 { font-size: 0.85rem; font-weight: 700; color: var(--text); margin-bottom: 1rem; }
+    .scope-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid rgba(30,40,64,0.5);
+      font-size: 0.8rem;
+    }
+    .scope-row:last-child { border-bottom: none; }
+    .scope-role { font-weight: 700; width: 90px; flex-shrink: 0; }
+    .arrow { color: var(--faint); }
+    .scope-desc { color: var(--muted); }
+
+    /* ── Footer ── */
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--faint);
+      font-size: 0.72rem;
+    }
+
+    /* ── Print ── */
+    @media print {
+      body { padding: 1.5rem; background: #060b14 !important; }
+      .feature-card, .role-card, .scope-box { break-inside: avoid; }
+      section { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="badge"><span class="dot"></span> AI-Powered Hiring Intelligence Platform</div>
+    <div class="logo">🔮 Resume<span>Flow</span></div>
+    <p class="subtitle">Complete feature reference &amp; role-based access guide · March 2026</p>
+  </div>
+
+  <!-- ── FEATURES ── -->
+  <section>
+    <p class="section-label">Capabilities</p>
+    <h2 class="section-title">Platform Features</h2>
+    <p class="section-desc">Every feature built for real hiring teams — from candidate upload to final decision.</p>
+
+    <div class="feature-grid">
+
+      <div class="feature-card">
+        <div class="feature-num">01</div>
+        <div class="feature-icon" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3)">🤖</div>
+        <h3>AI Resume Scoring</h3>
+        <p>Mistral-powered scoring across 4 dimensions — Technical Skills, Experience, Education, Soft Skills — with per-job custom weights.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-num">02</div>
+        <div class="feature-icon" style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.3)">🎯</div>
+        <h3>Custom Scoring Criteria</h3>
+        <p>Set pass / review / fail score thresholds and dimension weights per job opening. AI adapts its model accordingly.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-num">03</div>
+        <div class="feature-icon" style="background:rgba(244,114,182,0.15);border:1px solid rgba(244,114,182,0.3)">📤</div>
+        <h3>Batch Resume Upload</h3>
+        <p>Upload up to 100 resumes simultaneously (PDF &amp; DOCX). BullMQ processes everything in the background.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-num">04</div>
+        <div class="feature-icon" style="background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.3)">⚡</div>
+        <h3>Real-Time Pipeline</h3>
+        <p>Live status updates while resumes are processed — queued → processing → scored. No polling, no waiting.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-num">05</div>
+        <div class="feature-icon" style="background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3)">📊</div>
+        <h3>Role-Based Analytics</h3>
+        <p>Separate dashboard views per role. Admins see org-wide funnels. Managers track team output. TLs monitor pipelines.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-num">06</div>
+        <div class="feature-icon" style="background:rgba(6,182,212,0.15);border:1px solid rgba(6,182,212,0.3)">🏢</div>
+        <h3>Multi-Team Org Hierarchy</h3>
+        <p>Full org structure: Admin → Manager → Team Lead → Recruiter. Every level has scoped, role-appropriate data access.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-num">07</div>
+        <div class="feature-icon" style="background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.3)">🔍</div>
+        <h3>Talent Pool Search</h3>
+        <p>Search all candidates across the org by skills, job title, and experience level. Build pipelines proactively.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-num">08</div>
+        <div class="feature-icon" style="background:rgba(52,211,153,0.15);border:1px solid rgba(52,211,153,0.3)">📥</div>
+        <h3>CSV Export &amp; Reports</h3>
+        <p>Export all candidate data, AI scores, matched skills, and pipeline status for any job with one click.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-num">09</div>
+        <div class="feature-icon" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3)">👥</div>
+        <h3>Multi-Team Job Assignment</h3>
+        <p>Jobs can be assigned to multiple teams simultaneously. Team Leads then assign individual recruiters to each job.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-num">10</div>
+        <div class="feature-icon" style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.3)">👑</div>
+        <h3>User Management</h3>
+        <p>Admins can create, edit, deactivate, and reassign roles for any user. Full org structure control in one place.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-num">11</div>
+        <div class="feature-icon" style="background:rgba(139,92,246,0.15);border:1px solid rgba(139,92,246,0.3)">⚙️</div>
+        <h3>Settings &amp; Password Change</h3>
+        <p>Users can update their own password. Admin-managed accounts with role &amp; team configuration.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-num">12</div>
+        <div class="feature-icon" style="background:rgba(6,182,212,0.15);border:1px solid rgba(6,182,212,0.3)">📞</div>
+        <h3>AI Outbound Calling <span style="font-size:0.6rem;color:#64748b;font-weight:500">(Pipeline)</span></h3>
+        <p>Automated candidate phone screening via Plivo + Deepgram + ElevenLabs + OpenAI. Transcripts stored and evaluated.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── ROLES ── -->
+  <section>
+    <p class="section-label">Role-Based Access</p>
+    <h2 class="section-title">Who Can Do What</h2>
+    <p class="section-desc">Each role gets exactly the tools and data they need — nothing more, nothing less.</p>
+
+    <div class="role-grid">
+
+      <!-- Admin -->
+      <div class="role-card" style="border-color: rgba(245,158,11,0.3)">
+        <div class="role-header">
+          <span class="role-emoji">👑</span>
+          <div>
+            <div class="role-name" style="color:#f59e0b">Admin</div>
+            <div class="role-tag" style="color:#f59e0b">Full Platform Access</div>
+          </div>
+        </div>
+        <ul class="access-list">
+          <li class="access-item"><span class="check" style="color:#f59e0b">✓</span><span><strong>User Management</strong> — Create, edit, deactivate any user; assign roles</span></li>
+          <li class="access-item"><span class="check" style="color:#f59e0b">✓</span><span><strong>Org Structure</strong> — Create and manage all teams; assign managers</span></li>
+          <li class="access-item"><span class="check" style="color:#f59e0b">✓</span><span><strong>All Jobs</strong> — View, create, and manage every job in the org</span></li>
+          <li class="access-item"><span class="check" style="color:#f59e0b">✓</span><span><strong>All Candidates</strong> — Access every candidate across all jobs and teams</span></li>
+          <li class="access-item"><span class="check" style="color:#f59e0b">✓</span><span><strong>Full Analytics</strong> — Org-wide funnels, pass/fail rates, team comparisons</span></li>
+          <li class="access-item"><span class="check" style="color:#f59e0b">✓</span><span><strong>Resume Upload</strong> — Upload to any job in the org</span></li>
+          <li class="access-item"><span class="check" style="color:#f59e0b">✓</span><span><strong>Scoring Config</strong> — Set AI criteria on any job</span></li>
+          <li class="access-item"><span class="check" style="color:#f59e0b">✓</span><span><strong>CSV Export</strong> — Export data from any job</span></li>
+          <li class="access-item"><span class="check" style="color:#f59e0b">✓</span><span><strong>Talent Pool</strong> — Search entire candidate database</span></li>
+        </ul>
+      </div>
+
+      <!-- Manager -->
+      <div class="role-card" style="border-color: rgba(99,102,241,0.3)">
+        <div class="role-header">
+          <span class="role-emoji">👔</span>
+          <div>
+            <div class="role-name" style="color:#6366f1">Manager</div>
+            <div class="role-tag" style="color:#6366f1">Team &amp; Job Owner</div>
+          </div>
+        </div>
+        <ul class="access-list">
+          <li class="access-item"><span class="check" style="color:#6366f1">✓</span><span><strong>Job Creation</strong> — Create new jobs and configure scoring criteria</span></li>
+          <li class="access-item"><span class="check" style="color:#6366f1">✓</span><span><strong>Team Assignment</strong> — Assign teams and Team Leads to their jobs</span></li>
+          <li class="access-item"><span class="check" style="color:#6366f1">✓</span><span><strong>Their Jobs</strong> — Full visibility into all jobs they own or manage</span></li>
+          <li class="access-item"><span class="check" style="color:#6366f1">✓</span><span><strong>Team Analytics</strong> — Pass rates, recruiter leaderboard, team funnel</span></li>
+          <li class="access-item"><span class="check" style="color:#6366f1">✓</span><span><strong>Recruiter Output</strong> — Per-recruiter upload counts, scores, funnel stages</span></li>
+          <li class="access-item"><span class="check" style="color:#6366f1">✓</span><span><strong>Resume Upload</strong> — Upload to jobs they manage</span></li>
+          <li class="access-item"><span class="check" style="color:#6366f1">✓</span><span><strong>CSV Export</strong> — Export from their jobs</span></li>
+          <li class="access-item"><span class="check" style="color:#6366f1">✓</span><span><strong>Talent Pool</strong> — Search candidates in their scope</span></li>
+        </ul>
+      </div>
+
+      <!-- Team Lead -->
+      <div class="role-card" style="border-color: rgba(34,197,94,0.3)">
+        <div class="role-header">
+          <span class="role-emoji">🧭</span>
+          <div>
+            <div class="role-name" style="color:#22c55e">Team Lead</div>
+            <div class="role-tag" style="color:#22c55e">Team Pipeline Manager</div>
+          </div>
+        </div>
+        <ul class="access-list">
+          <li class="access-item"><span class="check" style="color:#22c55e">✓</span><span><strong>Recruiter Assignment</strong> — Assign recruiters to specific jobs</span></li>
+          <li class="access-item"><span class="check" style="color:#22c55e">✓</span><span><strong>Team Job Pipeline</strong> — All jobs assigned to their team</span></li>
+          <li class="access-item"><span class="check" style="color:#22c55e">✓</span><span><strong>Recruiter Tracking</strong> — Activity, uploads, and scores per recruiter</span></li>
+          <li class="access-item"><span class="check" style="color:#22c55e">✓</span><span><strong>Top Candidates</strong> — View top-ranked candidates for team's jobs</span></li>
+          <li class="access-item"><span class="check" style="color:#22c55e">✓</span><span><strong>Resume Upload</strong> — Upload to any job assigned to their team</span></li>
+          <li class="access-item"><span class="check" style="color:#22c55e">✓</span><span><strong>My Teams Page</strong> — Manage job ↔ recruiter assignments</span></li>
+          <li class="access-item"><span class="check" style="color:#22c55e">✓</span><span><strong>CSV Export</strong> — Export from assigned jobs</span></li>
+        </ul>
+      </div>
+
+      <!-- Recruiter -->
+      <div class="role-card" style="border-color: rgba(6,182,212,0.3)">
+        <div class="role-header">
+          <span class="role-emoji">🧑‍💻</span>
+          <div>
+            <div class="role-name" style="color:#06b6d4">Recruiter</div>
+            <div class="role-tag" style="color:#06b6d4">Candidate Uploader</div>
+          </div>
+        </div>
+        <ul class="access-list">
+          <li class="access-item"><span class="check" style="color:#06b6d4">✓</span><span><strong>Resume Upload</strong> — Upload to jobs they are personally assigned to</span></li>
+          <li class="access-item"><span class="check" style="color:#06b6d4">✓</span><span><strong>Candidate Management</strong> — View and manage candidates in assigned jobs</span></li>
+          <li class="access-item"><span class="check" style="color:#06b6d4">✓</span><span><strong>Personal Analytics</strong> — Own funnel: upload count, pass rates, pipeline status</span></li>
+          <li class="access-item"><span class="check" style="color:#06b6d4">✓</span><span><strong>Matched Skill Insights</strong> — AI-extracted skills vs. job requirements</span></li>
+          <li class="access-item"><span class="check" style="color:#06b6d4">✓</span><span><strong>Pipeline Status</strong> — Live processing status of uploaded resumes</span></li>
+          <li class="access-item"><span class="check" style="color:#06b6d4">✓</span><span><strong>CSV Export</strong> — Export from their assigned jobs</span></li>
+        </ul>
+      </div>
+
+    </div>
+
+    <!-- Scope Summary -->
+    <div class="scope-box">
+      <h3>🔒 Data Scope Summary</h3>
+      <div class="scope-row">
+        <span class="scope-role" style="color:#f59e0b">Admin</span>
+        <span class="arrow">→</span>
+        <span class="scope-desc">Full platform — all orgs, teams, jobs, users, and candidates</span>
+      </div>
+      <div class="scope-row">
+        <span class="scope-role" style="color:#6366f1">Manager</span>
+        <span class="arrow">→</span>
+        <span class="scope-desc">Their jobs only + their assigned teams</span>
+      </div>
+      <div class="scope-row">
+        <span class="scope-role" style="color:#22c55e">Team Lead</span>
+        <span class="arrow">→</span>
+        <span class="scope-desc">Jobs assigned to their team + their team's recruiters</span>
+      </div>
+      <div class="scope-row">
+        <span class="scope-role" style="color:#06b6d4">Recruiter</span>
+        <span class="arrow">→</span>
+        <span class="scope-desc">Only jobs they are personally assigned to</span>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    🔮 ResumeFlow &nbsp;·&nbsp; AI Hiring Intelligence Platform &nbsp;·&nbsp; © 2026 &nbsp;·&nbsp;
+    <em>Open in browser → Ctrl+P → Save as PDF to export</em>
+  </footer>
+
+</body>
+</html>
