@@ -173,13 +173,23 @@ router.post('/:teamId/members', requireRole('admin', 'manager'), requireTeamAcce
     return res.status(500).json({ error: error.message || 'Failed to add member' });
   }
 
-  // Notify the added user
-  await logActivity(
-    req.user.id, 'member_added', 'team', req.params.teamId, { user_id, role_in_team },
-    [user_id],
-    'Added to team',
-    `You have been added to a team as ${role_in_team}.`
-  );
+  // Notify the added user — include team name and adder's name
+  try {
+    const [{ data: team }, { data: adder }] = await Promise.all([
+      supabase.from('teams').select('name').eq('id', req.params.teamId).single(),
+      supabase.from('users').select('name, email').eq('id', req.user.id).single(),
+    ]);
+    const teamName = team?.name || 'a team';
+    const adderName = adder?.name || adder?.email || 'Someone';
+    await logActivity(
+      req.user.id, 'member_added', 'team', req.params.teamId, { user_id, role_in_team },
+      [user_id],
+      '👥 Added to team',
+      `${adderName} added you to "${teamName}" as ${role_in_team}.`
+    );
+  } catch (notifyErr) {
+    logger.warn(`[teams] Failed to send member-added notification: ${notifyErr.message}`);
+  }
 
   res.status(201).json({ member: data });
 });
