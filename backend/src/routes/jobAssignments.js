@@ -3,6 +3,7 @@ const router = express.Router();
 const supabase = require('../config/supabase');
 const authMiddleware = require('../middleware/auth');
 const requireRole = require('../middleware/requireRole');
+const { logActivity } = require('../services/activityLogger');
 const logger = require('../config/logger');
 
 router.use(authMiddleware);
@@ -64,6 +65,28 @@ router.post('/', requireRole('admin', 'manager', 'tl'), async (req, res) => {
     return res.status(500).json({ error: error.message || 'Failed to assign job' });
   }
 
+  // Notify the recruiter about their new job assignment
+  try {
+    const [{ data: jobRow }, { data: assigner }] = await Promise.all([
+      supabase.from('jobs').select('job_title, company_name').eq('id', job_id).single(),
+      supabase.from('users').select('name, email').eq('id', req.user.id).single(),
+    ]);
+    const assignerName = assigner?.name || assigner?.email || 'Your Team Lead';
+    const jobLabel = jobRow ? `${jobRow.job_title} at ${jobRow.company_name}` : job_id;
+    await logActivity(
+      req.user.id,
+      'job_assigned',
+      'job',
+      job_id,
+      { recruiter_id, job_title: jobRow?.job_title, company_name: jobRow?.company_name },
+      [recruiter_id],
+      '📋 Job assigned to you',
+      `${assignerName} has assigned you to "${jobLabel}".`
+    );
+  } catch (notifyErr) {
+    logger.warn(`[jobAssignments] Failed to send assignment notification: ${notifyErr.message}`);
+  }
+
   res.status(201).json({ assignment: data });
 });
 
@@ -108,6 +131,37 @@ router.post('/bulk', requireRole('admin', 'manager', 'tl'), async (req, res) => 
     .select();
 
   if (error) return res.status(500).json({ error: error.message });
+
+  // Notify the recruiter about each newly assigned job
+  if (job_ids.length > 0) {
+    try {
+      const [{ data: jobRows }, { data: assigner }] = await Promise.all([
+        supabase.from('jobs').select('id, job_title, company_name').in('id', job_ids),
+        supabase.from('users').select('name, email').eq('id', req.user.id).single(),
+      ]);
+      const assignerName = assigner?.name || assigner?.email || 'Your Team Lead';
+      const jobMap = Object.fromEntries((jobRows || []).map(j => [j.id, j]));
+      await Promise.all(
+        job_ids.map(job_id => {
+          const j = jobMap[job_id];
+          const jobLabel = j ? `${j.job_title} at ${j.company_name}` : job_id;
+          return logActivity(
+            req.user.id,
+            'job_assigned',
+            'job',
+            job_id,
+            { recruiter_id, job_title: j?.job_title, company_name: j?.company_name },
+            [recruiter_id],
+            '📋 Job assigned to you',
+            `${assignerName} has assigned you to "${jobLabel}".`
+          );
+        })
+      );
+    } catch (notifyErr) {
+      logger.warn(`[jobAssignments] Failed to send bulk assignment notifications: ${notifyErr.message}`);
+    }
+  }
+
   res.status(201).json({ assignments: data });
 });
 
