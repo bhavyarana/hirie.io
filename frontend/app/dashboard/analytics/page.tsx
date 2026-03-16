@@ -150,7 +150,7 @@ function AdminAnalytics({ data }: { data: Record<string, unknown> }) {
           <SectionHeader title="Outcome Split" />
           <ResponsiveContainer width="100%" height={160}>
             <PieChart>
-              <Pie data={funnelData} dataKey="value" cx="50%" cy="50%" outerRadius={60} label={({ name, value }: { name: string; value: number }) => `${name} ${value}`} labelLine={false} fontSize={11}>
+              <Pie data={funnelData} dataKey="value" cx="50%" cy="50%" outerRadius={60} label={({ name, value }) => `${name ?? ''} ${value ?? ''}`} labelLine={false} fontSize={11}>
                 {funnelData.map((d, i) => <Cell key={i} fill={d.color} />)}
               </Pie>
               <Tooltip />
