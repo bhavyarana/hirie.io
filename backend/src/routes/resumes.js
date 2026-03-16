@@ -62,16 +62,15 @@ async function canUploadToJob(user, job) {
   }
 
   if (role === 'recruiter') {
-    // Recruiter must be a member of any team assigned to this job
-    const { data: jt } = await supabase.from('job_teams').select('team_id').eq('job_id', jobId);
-    const teamIds = (jt || []).map(r => r.team_id);
-    if (!teamIds.length) {
-      // Fallback: legacy single-team field
-      if (!job.assigned_team_id) return false;
-      teamIds.push(job.assigned_team_id);
-    }
-    const { data: mem } = await supabase.from('team_members').select('id').eq('user_id', userId).in('team_id', teamIds).limit(1).single();
-    return !!mem;
+    // Recruiter must be explicitly assigned to this job via job_recruiter_assignments
+    // (Being a team member alone is insufficient — a TL/admin must have directly assigned them)
+    const { data: assignment } = await supabase
+      .from('job_recruiter_assignments')
+      .select('recruiter_id')
+      .eq('job_id', jobId)
+      .eq('recruiter_id', userId)
+      .maybeSingle();
+    return !!assignment;
   }
 
   return false;

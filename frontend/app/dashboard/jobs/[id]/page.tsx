@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDropzone } from 'react-dropzone';
-import { candidatesApi, analyticsApi, uploadResumes, exportCSV, type Candidate } from '@/lib/api';
+import { candidatesApi, analyticsApi, uploadResumes, exportCSV, type Candidate, usersApi } from '@/lib/api';
 import { jobsApi, jobAssignmentsApi, type JobAssignment } from '@/lib/api';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
@@ -41,6 +41,8 @@ export default function JobDetailPage({ params }: Props) {
   const [isUploading, setIsUploading] = useState(false);
   const queryClient = useQueryClient();
 
+  const { data: currentUserData } = useQuery({ queryKey: ['me'], queryFn: () => usersApi.me() });
+
   const { data: jobData } = useQuery({ queryKey: ['job', jobId], queryFn: () => jobsApi.get(jobId) });
   const { data: candidatesData, isLoading } = useQuery({
     queryKey: ['candidates', jobId],
@@ -72,6 +74,16 @@ export default function JobDetailPage({ params }: Props) {
   const candidates: Candidate[] = candidatesData?.candidates ?? [];
   const analytics = analyticsData;
 
+  // Determine upload permission:
+  // - admin / manager / tl → always allowed
+  // - recruiter → only if they have an explicit job_recruiter_assignments row
+  const currentUser = currentUserData?.user;
+  const isRecruiter = currentUser?.role === 'recruiter';
+  const isAssignedRecruiter = isRecruiter
+    ? jobAssignments.some(a => a.recruiter_id === currentUser?.id)
+    : true; // non-recruiter roles are always allowed
+  const canUpload = !isRecruiter || isAssignedRecruiter;
+
   const filtered = statusFilter === 'all' ? candidates
     : candidates.filter(c => c.score_status === statusFilter || c.processing_status === statusFilter);
 
@@ -102,7 +114,7 @@ export default function JobDetailPage({ params }: Props) {
     onDrop,
     accept: { 'application/pdf': ['.pdf'], 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'] },
     maxFiles: 100,
-    disabled: isUploading,
+    disabled: isUploading || !canUpload,
   });
 
   function handleExport() {
@@ -206,32 +218,47 @@ export default function JobDetailPage({ params }: Props) {
         );
       })()}
 
-      {/* Upload Dropzone */}
-      <div {...getRootProps()} style={{
-        border: `2px dashed ${isDragActive ? '#6366f1' : '#1e2d4a'}`,
-        borderRadius: '1rem', padding: '2rem', textAlign: 'center',
-        background: isDragActive ? 'rgba(99,102,241,0.05)' : 'rgba(13,21,38,0.5)',
-        cursor: isUploading ? 'not-allowed' : 'pointer',
-        transition: 'all 0.2s', marginBottom: '1.5rem',
-      }}>
-        <input {...getInputProps()} />
-        {isUploading ? (
-          <div>
-            <p style={{ color: '#a5b4fc', marginBottom: '0.75rem' }}>Uploading… {uploadProgress}%</p>
-            <div style={{ background: '#1e2d4a', borderRadius: '999px', height: '6px', maxWidth: '400px', margin: '0 auto' }}>
-              <div style={{ background: 'linear-gradient(90deg, #6366f1, #8b5cf6)', height: '100%', borderRadius: '999px', width: `${uploadProgress}%`, transition: 'width 0.3s' }} />
+      {/* Upload Dropzone — hidden for unassigned recruiters */}
+      {!canUpload ? (
+        <div style={{
+          border: '2px dashed #1e2d4a',
+          borderRadius: '1rem', padding: '2rem', textAlign: 'center',
+          background: 'rgba(13,21,38,0.5)', marginBottom: '1.5rem',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem',
+        }}>
+          <div style={{ fontSize: '2rem' }}>🔒</div>
+          <p style={{ color: '#94a3b8', fontWeight: 600, margin: 0 }}>Upload not available</p>
+          <p style={{ color: '#64748b', fontSize: '0.825rem', margin: 0 }}>
+            You are not assigned to this job. Contact your Team Lead to get access.
+          </p>
+        </div>
+      ) : (
+        <div {...getRootProps()} style={{
+          border: `2px dashed ${isDragActive ? '#6366f1' : '#1e2d4a'}`,
+          borderRadius: '1rem', padding: '2rem', textAlign: 'center',
+          background: isDragActive ? 'rgba(99,102,241,0.05)' : 'rgba(13,21,38,0.5)',
+          cursor: isUploading ? 'not-allowed' : 'pointer',
+          transition: 'all 0.2s', marginBottom: '1.5rem',
+        }}>
+          <input {...getInputProps()} />
+          {isUploading ? (
+            <div>
+              <p style={{ color: '#a5b4fc', marginBottom: '0.75rem' }}>Uploading… {uploadProgress}%</p>
+              <div style={{ background: '#1e2d4a', borderRadius: '999px', height: '6px', maxWidth: '400px', margin: '0 auto' }}>
+                <div style={{ background: 'linear-gradient(90deg, #6366f1, #8b5cf6)', height: '100%', borderRadius: '999px', width: `${uploadProgress}%`, transition: 'width 0.3s' }} />
+              </div>
             </div>
-          </div>
-        ) : (
-          <>
-            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📄</div>
-            <p style={{ color: '#94a3b8', fontWeight: 500, marginBottom: '0.25rem' }}>
-              {isDragActive ? 'Drop resumes here!' : 'Drag & drop up to 100 resumes'}
-            </p>
-            <p style={{ color: '#64748b', fontSize: '0.8rem' }}>PDF, DOCX supported • Max 20MB each</p>
-          </>
-        )}
-      </div>
+          ) : (
+            <>
+              <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📄</div>
+              <p style={{ color: '#94a3b8', fontWeight: 500, marginBottom: '0.25rem' }}>
+                {isDragActive ? 'Drop resumes here!' : 'Drag & drop up to 100 resumes'}
+              </p>
+              <p style={{ color: '#64748b', fontSize: '0.8rem' }}>PDF, DOCX supported • Max 20MB each</p>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '0.25rem', background: '#0a0f1e', padding: '0.25rem', borderRadius: '0.625rem', width: 'fit-content', marginBottom: '1.5rem' }}>
