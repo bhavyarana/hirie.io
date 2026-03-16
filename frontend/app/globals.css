@@ -29,6 +29,14 @@
   --scrollbar-track: #0a0f1e;
   --scrollbar-thumb: #1e2d4a;
   --scrollbar-thumb-hover: #2d3f5f;
+
+  /* Topbar backdrop */
+  --topbar-bg: rgba(10, 15, 30, 0.85);
+
+  /* Table */
+  --table-header-bg: rgba(30, 45, 74, 0.4);
+  --table-row-hover: rgba(99, 102, 241, 0.04);
+  --table-border: #1e2d4a;
 }
 
 /* =====================================================
@@ -48,7 +56,7 @@
   --border-accent:  rgba(99, 102, 241, 0.35);
 
   --text-primary:   #0f172a;
-  --text-secondary: #475569;
+  --text-secondary: #334155;
   --text-muted:     #64748b;
   --text-faint:     #94a3b8;
 
@@ -58,6 +66,14 @@
   --scrollbar-track: #f1f5f9;
   --scrollbar-thumb: #cbd5e1;
   --scrollbar-thumb-hover: #94a3b8;
+
+  /* Topbar backdrop */
+  --topbar-bg: rgba(248, 250, 252, 0.9);
+
+  /* Table */
+  --table-header-bg: rgba(241, 245, 249, 0.9);
+  --table-row-hover: rgba(99, 102, 241, 0.03);
+  --table-border: #e2e8f0;
 }
 
 @theme inline {
@@ -85,26 +101,148 @@ body {
   transition: background 0.2s ease, color 0.2s ease;
 }
 
-/* Scrollbar styling */
+/* =====================================================
+   LIGHT MODE — override hardcoded inline dark colors
+   ===================================================== */
+
+/* All the inline-styled cards / containers that use hardcoded dark values */
+[data-theme="light"] [style*="background: #0d1526"],
+[data-theme="light"] [style*="background: rgb(13, 21, 38)"],
+[data-theme="light"] [style*="background:#0d1526"] {
+  background: #ffffff !important;
+  box-shadow: 0 1px 8px rgba(0,0,0,0.07) !important;
+}
+
+[data-theme="light"] [style*="background: #0a0f1e"],
+[data-theme="light"] [style*="background:#0a0f1e"] {
+  background: #f1f5f9 !important;
+}
+
+[data-theme="light"] [style*="background: #111827"],
+[data-theme="light"] [style*="background:#111827"] {
+  background: #f8fafc !important;
+}
+
+/* Card borders */
+[data-theme="light"] [style*="border: 1px solid #1e2d4a"],
+[data-theme="light"] [style*="border:1px solid #1e2d4a"],
+[data-theme="light"] [style*="border-color: #1e2d4a"] {
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] [style*="border: 1px solid #1a2840"],
+[data-theme="light"] [style*="border-color: #1a2840"] {
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] [style*="border-bottom: 1px solid #1e2d4a"] {
+  border-bottom-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] [style*="border-top: 1px solid #1e2d4a"] {
+  border-top-color: #e2e8f0 !important;
+}
+
+/* Dark input backgrounds */
+[data-theme="light"] [style*="background: #1e2d4a"],
+[data-theme="light"] [style*="background:#1e2d4a"] {
+  background: #f1f5f9 !important;
+}
+
+/* Text colors */
+[data-theme="light"] [style*="color: #e2e8f0"],
+[data-theme="light"] [style*="color:#e2e8f0"] {
+  color: #0f172a !important;
+}
+
+[data-theme="light"] [style*="color: #94a3b8"],
+[data-theme="light"] [style*="color:#94a3b8"] {
+  color: #334155 !important;
+}
+
+[data-theme="light"] [style*="color: #64748b"],
+[data-theme="light"] [style*="color:#64748b"] {
+  color: #64748b !important;
+}
+
+[data-theme="light"] [style*="color: #475569"],
+[data-theme="light"] [style*="color:#475569"] {
+  color: #64748b !important;
+}
+
+/* Sidebar & secondary BGs */
+[data-theme="light"] [style*="background: rgba(30, 45, 74"],
+[data-theme="light"] [style*="background:rgba(30,45,74"] {
+  background: rgba(99, 102, 241, 0.06) !important;
+}
+
+[data-theme="light"] [style*="background: rgba(13, 21, 38"],
+[data-theme="light"] [style*="background:rgba(13,21,38"] {
+  background: rgba(241, 245, 249, 0.9) !important;
+}
+
+/* Table header rows */
+[data-theme="light"] [style*="background: rgba(30,45,74,0.4)"],
+[data-theme="light"] [style*="background:rgba(30,45,74,0.4)"] {
+  background: #f8fafc !important;
+}
+
+/* Slider track / progress bar backgrounds */
+[data-theme="light"] [style*="background: #1e2d4a; border-radius"] {
+  background: #e2e8f0 !important;
+}
+
+/* =====================================================
+   LIGHT MODE — topbar fix
+   ===================================================== */
+[data-theme="light"] .dashboard-topbar {
+  background: rgba(248, 250, 252, 0.92) !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+
+/* =====================================================
+   LIGHT MODE — score rings, charts — ensure readability
+   ===================================================== */
+[data-theme="light"] circle[stroke="#1e2d4a"] {
+  stroke: #e2e8f0 !important;
+}
+
+/* =====================================================
+   Scrollbar
+   ===================================================== */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
 ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
-/* Glassmorphism utility */
+/* =====================================================
+   Utilities
+   ===================================================== */
 .glass {
-  background: rgba(13, 21, 38, 0.8);
+  background: var(--bg-card);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(99, 102, 241, 0.15);
+  border: 1px solid var(--border);
 }
 
-/* Gradient text */
 .gradient-text {
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a78bfa 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
+
+/* Themed card — use this class for new components */
+.theme-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  box-shadow: var(--shadow-card);
+}
+
+/* Themed text helpers */
+.text-primary   { color: var(--text-primary)   !important; }
+.text-secondary { color: var(--text-secondary) !important; }
+.text-muted     { color: var(--text-muted)     !important; }
 
 /* Animations */
 @keyframes fadeInUp {
@@ -127,6 +265,10 @@ body {
   0%, 100% { transform: translateY(0); }
   50%       { transform: translateY(-10px); }
 }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
 
 .animate-fade-in-up  { animation: fadeInUp 0.5s ease forwards; }
 .animate-fade-in     { animation: fadeIn   0.3s ease forwards; }
@@ -148,9 +290,9 @@ body {
 /* Card hover */
 .card-hover { transition: all 0.2s ease; }
 .card-hover:hover {
-  border-color: rgba(99, 102, 241, 0.4);
+  border-color: rgba(99, 102, 241, 0.4) !important;
   transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(99, 102, 241, 0.15);
+  box-shadow: 0 8px 30px rgba(99, 102, 241, 0.12);
 }
 
 /* Inputs */
@@ -174,12 +316,16 @@ input::placeholder, textarea::placeholder {
 .recharts-cartesian-grid-horizontal line,
 .recharts-cartesian-grid-vertical line { stroke: var(--border) !important; }
 .recharts-text { fill: var(--text-muted) !important; }
+[data-theme="light"] .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: #fff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
 
-/* Theme transition — smooth property changes */
+/* Theme transitions */
 *, *::before, *::after {
   transition-property: background-color, border-color, color;
   transition-duration: 0.15s;
   transition-timing-function: ease;
 }
-/* But don't apply to all — only themed elements */
 button, a { transition-property: all; }
