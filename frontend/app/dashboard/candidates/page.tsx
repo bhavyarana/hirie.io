@@ -90,62 +90,79 @@ function SkillChip({ label }: { label: string }) {
 
 function HiringStatusEditor({ c, onSave }: {
   c: Candidate;
-  onSave: (id: string, hiring_status: string, rejection_reason?: string) => void;
+  onSave: (id: string, hiring_status: string, rejection_reason?: string, hiring_feedback?: string) => void;
 }) {
   const [localStatus, setLocalStatus] = useState(c.hiring_status || '');
   const [reason, setReason] = useState(c.rejection_reason || '');
+  const [feedback, setFeedback] = useState(c.hiring_feedback || '');
+
+  const handleSave = () => {
+    if (!localStatus) return;
+    onSave(c.id, localStatus, localStatus === 'rejected' ? reason : undefined, feedback || undefined);
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingTop: '0.5rem', borderTop: '1px solid #1e2d4a' }}>
       <label style={{ color: '#475569', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Hiring Status</label>
-      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        <select
-          value={localStatus}
-          onChange={e => {
-            setLocalStatus(e.target.value);
-            if (e.target.value !== 'rejected') {
-              // Auto-save non-rejection statuses immediately
-              onSave(c.id, e.target.value);
-            }
-          }}
+
+      {/* Status dropdown */}
+      <select
+        value={localStatus}
+        onChange={e => setLocalStatus(e.target.value)}
+        style={{
+          background: '#111827', border: '1px solid #1e2d4a', borderRadius: '0.5rem',
+          padding: '0.35rem 0.5rem', fontSize: '0.78rem', cursor: 'pointer',
+          color: localStatus ? (HIRING_COLOR[localStatus] || '#e2e8f0') : '#64748b',
+          fontWeight: localStatus ? 600 : 400,
+        }}
+      >
+        <option value="">— Set hiring status —</option>
+        {HIRING_STATUSES.map(h => (
+          <option key={h.value} value={h.value}>{h.label}</option>
+        ))}
+      </select>
+
+      {/* Rejection reason — only for rejected */}
+      {localStatus === 'rejected' && (
+        <input
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          placeholder="Reason for rejection…"
           style={{
-            flex: 1, minWidth: '140px', background: '#111827', border: '1px solid #1e2d4a',
-            borderRadius: '0.5rem', padding: '0.35rem 0.5rem',
-            color: localStatus ? (HIRING_COLOR[localStatus] || '#e2e8f0') : '#64748b',
-            fontSize: '0.78rem', cursor: 'pointer', fontWeight: localStatus ? 600 : 400,
+            background: '#111827', border: '1px solid rgba(239,68,68,0.4)',
+            borderRadius: '0.5rem', padding: '0.35rem 0.6rem', color: '#fca5a5',
+            fontSize: '0.78rem', outline: 'none',
+          }}
+        />
+      )}
+
+      {/* Feedback — always visible */}
+      {localStatus && (
+        <textarea
+          value={feedback}
+          onChange={e => setFeedback(e.target.value)}
+          placeholder="Add notes / feedback (optional)…"
+          rows={2}
+          style={{
+            background: '#111827', border: '1px solid #1e2d4a', borderRadius: '0.5rem',
+            padding: '0.4rem 0.6rem', color: '#94a3b8', fontSize: '0.75rem',
+            outline: 'none', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5,
+          }}
+        />
+      )}
+
+      {/* Save button */}
+      {localStatus && (
+        <button
+          onClick={handleSave}
+          style={{
+            padding: '0.35rem 1rem', borderRadius: '0.5rem', border: '1px solid rgba(99,102,241,0.4)',
+            background: 'rgba(99,102,241,0.12)', color: '#a5b4fc', fontSize: '0.75rem',
+            fontWeight: 600, cursor: 'pointer', alignSelf: 'flex-end',
           }}
         >
-          <option value="">— Set hiring status —</option>
-          {HIRING_STATUSES.map(h => (
-            <option key={h.value} value={h.value}>{h.label}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Show reason input only for rejected */}
-      {localStatus === 'rejected' && (
-        <div style={{ display: 'flex', gap: '0.4rem' }}>
-          <input
-            value={reason}
-            onChange={e => setReason(e.target.value)}
-            placeholder="Reason for rejection…"
-            style={{
-              flex: 1, background: '#111827', border: '1px solid rgba(239,68,68,0.4)',
-              borderRadius: '0.5rem', padding: '0.35rem 0.6rem', color: '#fca5a5',
-              fontSize: '0.78rem', outline: 'none',
-            }}
-          />
-          <button
-            onClick={() => onSave(c.id, 'rejected', reason)}
-            style={{
-              padding: '0.35rem 0.75rem', borderRadius: '0.5rem',
-              background: '#ef444420', color: '#ef4444', fontSize: '0.75rem',
-              fontWeight: 600, cursor: 'pointer', border: '1px solid #ef444440',
-            } as React.CSSProperties}
-          >
-            Save
-          </button>
-        </div>
+          Save
+        </button>
       )}
     </div>
   );
@@ -158,7 +175,7 @@ function CandidateCard({ c, canUpdatePipeline, canUpdateHiring, onPipelineChange
   canUpdatePipeline: boolean;
   canUpdateHiring: boolean;
   onPipelineChange: (id: string, status: string) => void;
-  onHiringChange: (id: string, hiring_status: string, rejection_reason?: string) => void;
+  onHiringChange: (id: string, hiring_status: string, rejection_reason?: string, hiring_feedback?: string) => void;
 }) {
   const initials = ((c.name || c.email || c.resume_file_name || '?').slice(0, 2)).toUpperCase();
   const topSkills = (c.matched_skills || []).slice(0, 4);
@@ -295,8 +312,8 @@ export default function CandidatesPage() {
   });
 
   const hiringMutation = useMutation({
-    mutationFn: ({ id, hiring_status, rejection_reason }: { id: string; hiring_status: string; rejection_reason?: string }) =>
-      candidatesApi.updateHiringStatus(id, hiring_status, rejection_reason),
+    mutationFn: ({ id, hiring_status, rejection_reason, hiring_feedback }: { id: string; hiring_status: string; rejection_reason?: string; hiring_feedback?: string }) =>
+      candidatesApi.updateHiringStatus(id, hiring_status, rejection_reason, hiring_feedback),
     onSuccess: (_, vars) => {
       toast.success(`Hiring status set to "${HIRING_STATUSES.find(h => h.value === vars.hiring_status)?.label}"`);
       queryClient.invalidateQueries({ queryKey: ['candidates', selectedJobId] });
@@ -383,8 +400,8 @@ export default function CandidatesPage() {
                 canUpdatePipeline={canUpdatePipeline}
                 canUpdateHiring={canUpdateHiring}
                 onPipelineChange={(id, status) => pipelineMutation.mutate({ id, status })}
-                onHiringChange={(id, hiring_status, rejection_reason) =>
-                  hiringMutation.mutate({ id, hiring_status, rejection_reason })
+                onHiringChange={(id, hiring_status, rejection_reason, hiring_feedback) =>
+                  hiringMutation.mutate({ id, hiring_status, rejection_reason, hiring_feedback })
                 }
               />
             ))}

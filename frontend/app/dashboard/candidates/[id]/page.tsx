@@ -132,7 +132,7 @@ export default function CandidateDetailPage({ params }: Props) {
             )}
           </div>
 
-          {/* Hiring Status badge */}
+          {/* Hiring Status badge + feedback */}
           {hiringStatusInfo && (
             <div style={{ marginTop: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
               <span style={{
@@ -151,6 +151,16 @@ export default function CandidateDetailPage({ params }: Props) {
                 }}>
                   <span style={{ color: '#ef4444', fontWeight: 600 }}>Rejection reason: </span>
                   {candidate.rejection_reason}
+                </div>
+              )}
+              {candidate.hiring_feedback && (
+                <div style={{
+                  padding: '0.6rem 0.875rem', borderRadius: '0.5rem',
+                  background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.2)',
+                  color: '#a5b4fc', fontSize: '0.8rem', lineHeight: 1.5, maxWidth: '480px',
+                }}>
+                  <span style={{ color: '#6366f1', fontWeight: 600 }}>📝 Notes: </span>
+                  {candidate.hiring_feedback}
                 </div>
               )}
             </div>

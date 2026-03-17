@@ -470,18 +470,17 @@ const VALID_HIRING_STATUSES = [
 ];
 
 router.patch('/candidates/:id/hiring-status', authMiddleware, requireRole('admin', 'manager', 'tl', 'recruiter'), async (req, res) => {
-  const { hiring_status, rejection_reason } = req.body;
+  const { hiring_status, rejection_reason, hiring_feedback } = req.body;
 
   if (!hiring_status || !VALID_HIRING_STATUSES.includes(hiring_status)) {
     return res.status(400).json({ error: `hiring_status must be one of: ${VALID_HIRING_STATUSES.join(', ')}` });
   }
 
-  const updates = { hiring_status };
-  if (hiring_status === 'rejected') {
-    updates.rejection_reason = rejection_reason || null;
-  } else {
-    updates.rejection_reason = null; // clear if not rejected
-  }
+  const updates = {
+    hiring_status,
+    hiring_feedback: hiring_feedback || null,
+    rejection_reason: hiring_status === 'rejected' ? (rejection_reason || null) : null,
+  };
 
   const { data, error } = await supabase
     .from('candidates')
@@ -492,7 +491,6 @@ router.patch('/candidates/:id/hiring-status', authMiddleware, requireRole('admin
 
   if (error || !data) return res.status(404).json({ error: 'Candidate not found or update failed' });
 
-  // Notify the recruiter if updated by someone else
   if (data.recruiter_id && data.recruiter_id !== req.user.id) {
     await logActivity(
       req.user.id, `hiring_status_${hiring_status}`, 'candidate', req.params.id,
