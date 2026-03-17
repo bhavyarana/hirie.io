@@ -15,6 +15,7 @@ const usersRouter = require('./routes/users');
 const teamsRouter = require('./routes/teams');
 const notificationsRouter = require('./routes/notifications');
 const jobAssignmentsRouter = require('./routes/jobAssignments');
+const talentPoolRouter = require('./routes/talentPool');
 const logger = require('./config/logger');
 
 // Start BullMQ worker in the same process as the API server
@@ -60,6 +61,7 @@ app.use('/api/users', usersRouter);
 app.use('/api/teams', teamsRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/job-assignments', jobAssignmentsRouter);
+app.use('/api/talent-pool', talentPoolRouter);
 
 // 404 handler
 app.use((req, res) => {

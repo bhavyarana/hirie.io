@@ -98,7 +98,40 @@ export const jobAssignmentsApi = {
     apiFetch<{ assignments: JobAssignment[] }>('/api/job-assignments/bulk', { method: 'POST', body: JSON.stringify({ recruiter_id: recruiterId, job_ids: jobIds }) }),
 };
 
-// ─── Analytics ───────────────────────────────────────────────────────────────
+// ─── Talent Pool ────────────────────────────────────────────────────────────
+export const talentPoolApi = {
+  list: (params?: {
+    q?: string;
+    location?: string;
+    uploaded_by?: string;
+    date_range?: 'last_24h' | 'last_week' | 'last_month' | 'custom';
+    year?: number;
+    month?: number;
+    min_exp?: number;
+    max_exp?: number;
+    page?: number;
+    limit?: number;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.q) q.set('q', params.q);
+    if (params?.location) q.set('location', params.location);
+    if (params?.uploaded_by) q.set('uploaded_by', params.uploaded_by);
+    if (params?.date_range) q.set('date_range', params.date_range);
+    if (params?.year != null) q.set('year', String(params.year));
+    if (params?.month != null) q.set('month', String(params.month));
+    if (params?.min_exp != null) q.set('min_exp', String(params.min_exp));
+    if (params?.max_exp != null) q.set('max_exp', String(params.max_exp));
+    if (params?.page) q.set('page', String(params.page));
+    if (params?.limit) q.set('limit', String(params.limit));
+    return apiFetch<{ candidates: TalentPoolCandidate[]; total: number; page: number; limit: number }>(
+      `/api/talent-pool${q.toString() ? `?${q.toString()}` : ''}`
+    );
+  },
+  get: (id: string) => apiFetch<{ candidate: TalentPoolCandidate & { resume_download_url: string | null } }>(`/api/talent-pool/${id}`),
+  getUploaders: () => apiFetch<{ uploaders: { id: string; name: string }[] }>('/api/talent-pool/uploaders'),
+};
+
+// ─── Candidates ───────────────────────────────────────────────────────────────
 export const candidatesApi = {
   list: (jobId: string, params?: { status?: string }) => {
     const q = params?.status ? `?status=${params.status}` : '';
@@ -376,6 +409,25 @@ export interface CandidateSearchResult {
   score_status: 'pass' | 'review' | 'fail' | null;
   matched_skills: string[];
   summary: string | null;
+}
+
+export interface TalentPoolCandidate {
+  id: string;
+  candidate_id: string | null;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  resume_file_path: string;
+  resume_file_name: string;
+  extracted_skills: string[];
+  extracted_titles: string[];
+  experience_years: number | null;
+  current_location: string | null;
+  first_seen_job_title: string | null;
+  uploaded_by: string | null;
+  uploaded_by_name: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AnalyticsData {

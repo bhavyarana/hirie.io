@@ -73,6 +73,70 @@ const worker = new Worker(
       logger.info(`[Worker] Profile extracted: ${profileResult.skills.length} skills, ${profileResult.titles.length} titles, ${profileResult.experience_years}yr exp`);
     }
 
+    // Sync extracted profile back to talent_pool row (matched by resume_hash)
+    try {
+      // Look up the candidate to get its resume_hash
+      const { data: candidateRow } = await supabase
+        .from('candidates')
+        .select('resume_hash')
+        .eq('id', candidateId)
+        .single();
+
+      if (candidateRow?.resume_hash) {
+        const { data: poolEntry } = await supabase
+          .from('talent_pool')
+          .select('id, email')
+          .eq('resume_hash', candidateRow.resume_hash)
+          .maybeSingle();
+
+        if (poolEntry) {
+          const newEmail = basicInfo.email || null;
+
+          // If we now have an email, check if another pool entry already has this email
+          if (newEmail) {
+            const { data: emailConflict } = await supabase
+              .from('talent_pool')
+              .select('id')
+              .eq('email', newEmail)
+              .neq('id', poolEntry.id)
+              .maybeSingle();
+
+            if (emailConflict) {
+              // Another entry already owns this email — remove our duplicate placeholder
+              await supabase.from('talent_pool').delete().eq('id', poolEntry.id);
+              logger.info(`[TalentPool] Removed duplicate pool entry ${poolEntry.id} (email ${newEmail} already exists)`);
+            } else {
+              // Safe to update with full profile
+              await supabase.from('talent_pool').update({
+                email: newEmail,
+                name: basicInfo.name || null,
+                phone: basicInfo.phone || null,
+                extracted_skills: profileResult.skills || [],
+                extracted_titles: profileResult.titles || [],
+                experience_years: profileResult.experience_years,
+                current_location: profileResult.location,
+              }).eq('id', poolEntry.id);
+              logger.info(`[TalentPool] Updated pool entry ${poolEntry.id} with extracted profile`);
+            }
+          } else {
+            // No email yet — still update skills/location/name
+            await supabase.from('talent_pool').update({
+              name: basicInfo.name || null,
+              phone: basicInfo.phone || null,
+              extracted_skills: profileResult.skills || [],
+              extracted_titles: profileResult.titles || [],
+              experience_years: profileResult.experience_years,
+              current_location: profileResult.location,
+            }).eq('id', poolEntry.id);
+            logger.info(`[TalentPool] Updated pool entry ${poolEntry.id} (no email extracted)`);
+          }
+        }
+      }
+    } catch (poolErr) {
+      // Non-fatal
+      logger.warn(`[TalentPool] Sync failed for candidate ${candidateId}: ${poolErr.message}`);
+    }
+
     // Step 5: Score with Mistral AI — gracefully degrade on ANY AI error
     let scoreResult;
     try {

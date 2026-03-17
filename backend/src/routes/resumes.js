@@ -76,6 +76,43 @@ async function canUploadToJob(user, job) {
   return false;
 }
 
+/**
+ * Insert a new row into talent_pool when a resume is uploaded.
+ * Dedup strategy:
+ *   - Email is the unique key (partial index on NON-NULL emails)
+ *   - At upload time email is unknown → insert by resume_hash
+ *   - If another row with same resume_hash already exists → skip (already in pool)
+ *   - Later the worker updates name/email/skills once AI extracts them
+ */
+async function upsertTalentPool(candidateId, file, resumeHash, storagePath, recruiterId, job) {
+  try {
+    // Check if already in talent pool by hash
+    const { data: existing } = await supabase
+      .from('talent_pool')
+      .select('id')
+      .eq('resume_hash', resumeHash)
+      .maybeSingle();
+
+    if (existing) {
+      // Already in pool — no action needed
+      return;
+    }
+
+    await supabase.from('talent_pool').insert({
+      candidate_id: candidateId,
+      resume_file_path: storagePath,
+      resume_file_name: file.originalname,
+      resume_hash: resumeHash,
+      uploaded_by: recruiterId,
+      first_seen_job_id: job.id,
+      first_seen_job_title: job.job_title,
+    });
+  } catch (err) {
+    // Non-fatal: log and continue
+    logger.warn(`[TalentPool] Failed to upsert for candidate ${candidateId}: ${err.message}`);
+  }
+}
+
 // POST /api/jobs/:id/upload — Batch upload resumes
 router.post('/jobs/:id/upload', authMiddleware, upload.array('resumes', 100), async (req, res) => {
   const { id: jobId } = req.params;
@@ -187,6 +224,9 @@ router.post('/jobs/:id/upload', authMiddleware, upload.array('resumes', 100), as
             scoringCriteria: job.scoring_criteria || null,
           }, { attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 100, removeOnFail: 50 });
 
+          // 4. Add to talent pool (email dedup handled inside)
+          await upsertTalentPool(candidate.id, file, resumeHash, storagePath, recruiterId, job);
+
           logger.info(`[Upload] ✓ Queued: "${file.originalname}" → ${candidate.id}`);
           return { candidateId: candidate.id, fileName: file.originalname, status: 'queued' };
         })(),
@@ -252,11 +292,11 @@ router.get('/jobs/:id/candidates', authMiddleware, async (req, res) => {
     .order('created_at', { ascending: false })
     .range((page - 1) * limit, page * limit - 1);
 
-  // Recruiter only sees own candidates
-  if (role === 'recruiter') {
+  // Recruiter and TL: "My Candidates" = only what they personally uploaded
+  if (role === 'recruiter' || role === 'tl') {
     query = query.eq('recruiter_id', userId);
   }
-  // TL, manager, admin see all candidates for this job (RLS handles deeper)
+  // manager, admin see all candidates for this job
 
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: 'Failed to fetch candidates' });
