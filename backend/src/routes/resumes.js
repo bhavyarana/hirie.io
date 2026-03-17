@@ -456,6 +456,57 @@ router.patch('/candidates/:id/status', authMiddleware, requireRole('admin', 'man
   res.json({ candidate: data });
 });
 
+// PATCH /api/candidates/:id/hiring-status — recruiter, TL, manager, admin can update hiring progress
+const VALID_HIRING_STATUSES = [
+  'client_screening',
+  'interview_l1',
+  'interview_l2',
+  'interview_l3',
+  'job_offered',
+  'rejected',
+  'joined',
+  'backout',
+  'duplicate',
+];
+
+router.patch('/candidates/:id/hiring-status', authMiddleware, requireRole('admin', 'manager', 'tl', 'recruiter'), async (req, res) => {
+  const { hiring_status, rejection_reason } = req.body;
+
+  if (!hiring_status || !VALID_HIRING_STATUSES.includes(hiring_status)) {
+    return res.status(400).json({ error: `hiring_status must be one of: ${VALID_HIRING_STATUSES.join(', ')}` });
+  }
+
+  const updates = { hiring_status };
+  if (hiring_status === 'rejected') {
+    updates.rejection_reason = rejection_reason || null;
+  } else {
+    updates.rejection_reason = null; // clear if not rejected
+  }
+
+  const { data, error } = await supabase
+    .from('candidates')
+    .update(updates)
+    .eq('id', req.params.id)
+    .select()
+    .single();
+
+  if (error || !data) return res.status(404).json({ error: 'Candidate not found or update failed' });
+
+  // Notify the recruiter if updated by someone else
+  if (data.recruiter_id && data.recruiter_id !== req.user.id) {
+    await logActivity(
+      req.user.id, `hiring_status_${hiring_status}`, 'candidate', req.params.id,
+      { hiring_status, rejection_reason: updates.rejection_reason },
+      [data.recruiter_id],
+      'Hiring status updated',
+      `Candidate hiring status changed to "${hiring_status.replace(/_/g, ' ')}".`
+    );
+  }
+
+  logger.info(`Candidate ${req.params.id} hiring_status updated to ${hiring_status} by ${req.user.id}`);
+  res.json({ candidate: data });
+});
+
 // POST /api/candidates/:id/reprocess — re-queue an already-processed candidate (admin/manager/tl)
 router.post('/candidates/:id/reprocess', authMiddleware, async (req, res) => {
   const candidateId = req.params.id;

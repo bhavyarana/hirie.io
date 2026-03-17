@@ -140,6 +140,11 @@ export const candidatesApi = {
   get: (id: string) => apiFetch<{ candidate: CandidateDetail }>(`/api/candidates/${id}`),
   updateStatus: (id: string, status: string) =>
     apiFetch<{ candidate: Candidate }>(`/api/candidates/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  updateHiringStatus: (id: string, hiring_status: string, rejection_reason?: string) =>
+    apiFetch<{ candidate: Candidate }>(`/api/candidates/${id}/hiring-status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ hiring_status, rejection_reason }),
+    }),
   search: (params: { q?: string; minExp?: number; maxExp?: number; scoreStatus?: string; page?: number; limit?: number }) => {
     const q = new URLSearchParams();
     if (params.q) q.set('q', params.q);
@@ -372,6 +377,8 @@ export interface Candidate {
   education_match: number | null;
   summary: string | null;
   recruiter_name?: string | null;
+  hiring_status: string | null;
+  rejection_reason: string | null;
   created_at: string;
 }
 

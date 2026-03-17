@@ -7,7 +7,9 @@ import { useUserContext } from '@/lib/context/UserContext';
 import { toast } from 'sonner';
 import Link from 'next/link';
 
-const STATUS_FILTERS = [
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const SCORE_FILTERS = [
   { label: 'All', value: '' },
   { label: 'Pass ✓', value: 'pass', color: '#22c55e' },
   { label: 'Review 👀', value: 'review', color: '#f59e0b' },
@@ -22,18 +24,47 @@ const PIPELINE_COLORS: Record<string, string> = {
   interview: '#f59e0b', rejected: '#ef4444',
 };
 
-const SCORE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  pass:   { bg: 'rgba(34,197,94,0.12)',  text: '#22c55e', border: 'rgba(34,197,94,0.3)' },
-  review: { bg: 'rgba(245,158,11,0.12)', text: '#f59e0b', border: 'rgba(245,158,11,0.3)' },
-  fail:   { bg: 'rgba(239,68,68,0.12)',  text: '#ef4444', border: 'rgba(239,68,68,0.3)' },
-};
+export const HIRING_STATUSES = [
+  { value: 'client_screening', label: 'Client Screening', color: '#6366f1' },
+  { value: 'interview_l1',    label: 'Interview – L1',    color: '#8b5cf6' },
+  { value: 'interview_l2',    label: 'Interview – L2',    color: '#a855f7' },
+  { value: 'interview_l3',    label: 'Interview – L3',    color: '#d946ef' },
+  { value: 'job_offered',     label: 'Job Offered',       color: '#22c55e' },
+  { value: 'rejected',        label: 'Rejected',          color: '#ef4444' },
+  { value: 'joined',          label: 'Joined',            color: '#10b981' },
+  { value: 'backout',         label: 'Backout',           color: '#f59e0b' },
+  { value: 'duplicate',       label: 'Duplicate',         color: '#64748b' },
+];
+
+const HIRING_COLOR: Record<string, string> = Object.fromEntries(HIRING_STATUSES.map(s => [s.value, s.color]));
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function ScorePill({ score, status }: { score: number | null; status: string | null }) {
-  if (score === null && !status) return <span style={{ color: '#64748b', fontSize: '0.75rem' }}>—</span>;
-  const s = SCORE_COLORS[status || ''] || { bg: 'rgba(100,116,139,0.12)', text: '#64748b', border: 'rgba(100,116,139,0.3)' };
+  const colorMap: Record<string, { bg: string; text: string; border: string }> = {
+    pass:   { bg: 'rgba(34,197,94,0.12)',  text: '#22c55e', border: 'rgba(34,197,94,0.3)' },
+    review: { bg: 'rgba(245,158,11,0.12)', text: '#f59e0b', border: 'rgba(245,158,11,0.3)' },
+    fail:   { bg: 'rgba(239,68,68,0.12)',  text: '#ef4444', border: 'rgba(239,68,68,0.3)' },
+  };
+  const s = colorMap[status || ''] || { bg: 'rgba(100,116,139,0.12)', text: '#64748b', border: 'rgba(100,116,139,0.3)' };
   return (
-    <span style={{ padding: '0.18rem 0.6rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', background: s.bg, color: s.text, border: `1px solid ${s.border}` }}>
-      {score != null ? `${Math.round(score)} · ` : ''}{status || 'pending'}
+    <span style={{ padding: '0.18rem 0.6rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', background: s.bg, color: s.text, border: `1px solid ${s.border}` }}>
+      {score != null ? `${Math.round(score)}  ` : ''}{status || 'pending'}
+    </span>
+  );
+}
+
+function HiringBadge({ status }: { status: string | null }) {
+  if (!status) return null;
+  const hs = HIRING_STATUSES.find(h => h.value === status);
+  if (!hs) return null;
+  return (
+    <span style={{
+      padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 600,
+      background: `${hs.color}18`, color: hs.color, border: `1px solid ${hs.color}40`,
+      whiteSpace: 'nowrap',
+    }}>
+      {hs.label}
     </span>
   );
 }
@@ -41,7 +72,7 @@ function ScorePill({ score, status }: { score: number | null; status: string | n
 function PipelineBadge({ status }: { status: string }) {
   const color = PIPELINE_COLORS[status] || '#64748b';
   return (
-    <span style={{ padding: '0.18rem 0.55rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 600, background: `${color}18`, color, border: `1px solid ${color}40` }}>
+    <span style={{ padding: '0.18rem 0.55rem', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 600, background: `${color}18`, color, border: `1px solid ${color}40` }}>
       {status}
     </span>
   );
@@ -55,10 +86,79 @@ function SkillChip({ label }: { label: string }) {
   );
 }
 
-function CandidateCard({ c, canUpdateStatus, onStatusChange }: {
+// ─── Hiring Status Inline Editor ──────────────────────────────────────────────
+
+function HiringStatusEditor({ c, onSave }: {
   c: Candidate;
-  canUpdateStatus: boolean;
-  onStatusChange: (id: string, status: string) => void;
+  onSave: (id: string, hiring_status: string, rejection_reason?: string) => void;
+}) {
+  const [localStatus, setLocalStatus] = useState(c.hiring_status || '');
+  const [reason, setReason] = useState(c.rejection_reason || '');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingTop: '0.5rem', borderTop: '1px solid #1e2d4a' }}>
+      <label style={{ color: '#475569', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Hiring Status</label>
+      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <select
+          value={localStatus}
+          onChange={e => {
+            setLocalStatus(e.target.value);
+            if (e.target.value !== 'rejected') {
+              // Auto-save non-rejection statuses immediately
+              onSave(c.id, e.target.value);
+            }
+          }}
+          style={{
+            flex: 1, minWidth: '140px', background: '#111827', border: '1px solid #1e2d4a',
+            borderRadius: '0.5rem', padding: '0.35rem 0.5rem',
+            color: localStatus ? (HIRING_COLOR[localStatus] || '#e2e8f0') : '#64748b',
+            fontSize: '0.78rem', cursor: 'pointer', fontWeight: localStatus ? 600 : 400,
+          }}
+        >
+          <option value="">— Set hiring status —</option>
+          {HIRING_STATUSES.map(h => (
+            <option key={h.value} value={h.value}>{h.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Show reason input only for rejected */}
+      {localStatus === 'rejected' && (
+        <div style={{ display: 'flex', gap: '0.4rem' }}>
+          <input
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            placeholder="Reason for rejection…"
+            style={{
+              flex: 1, background: '#111827', border: '1px solid rgba(239,68,68,0.4)',
+              borderRadius: '0.5rem', padding: '0.35rem 0.6rem', color: '#fca5a5',
+              fontSize: '0.78rem', outline: 'none',
+            }}
+          />
+          <button
+            onClick={() => onSave(c.id, 'rejected', reason)}
+            style={{
+              padding: '0.35rem 0.75rem', borderRadius: '0.5rem',
+              background: '#ef444420', color: '#ef4444', fontSize: '0.75rem',
+              fontWeight: 600, cursor: 'pointer', border: '1px solid #ef444440',
+            } as React.CSSProperties}
+          >
+            Save
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Candidate Card ───────────────────────────────────────────────────────────
+
+function CandidateCard({ c, canUpdatePipeline, canUpdateHiring, onPipelineChange, onHiringChange }: {
+  c: Candidate;
+  canUpdatePipeline: boolean;
+  canUpdateHiring: boolean;
+  onPipelineChange: (id: string, status: string) => void;
+  onHiringChange: (id: string, hiring_status: string, rejection_reason?: string) => void;
 }) {
   const initials = ((c.name || c.email || c.resume_file_name || '?').slice(0, 2)).toUpperCase();
   const topSkills = (c.matched_skills || []).slice(0, 4);
@@ -67,21 +167,20 @@ function CandidateCard({ c, canUpdateStatus, onStatusChange }: {
     <div
       style={{
         background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem',
-        padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.8rem',
+        padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem',
         transition: 'border-color 0.2s, box-shadow 0.2s',
       }}
       onMouseEnter={e => {
-        (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(99,102,241,0.45)';
-        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 24px rgba(99,102,241,0.07)';
+        (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(99,102,241,0.4)';
+        (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 24px rgba(99,102,241,0.06)';
       }}
       onMouseLeave={e => {
         (e.currentTarget as HTMLDivElement).style.borderColor = '#1e2d4a';
         (e.currentTarget as HTMLDivElement).style.boxShadow = 'none';
       }}
     >
-      {/* Header row */}
+      {/* Header */}
       <div style={{ display: 'flex', gap: '0.875rem', alignItems: 'flex-start' }}>
-        {/* Avatar */}
         <div style={{
           width: '42px', height: '42px', borderRadius: '50%', flexShrink: 0,
           background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
@@ -100,18 +199,16 @@ function CandidateCard({ c, canUpdateStatus, onStatusChange }: {
             </Link>
             <ScorePill score={c.score} status={c.score_status} />
           </div>
-          {c.email && <p style={{ color: '#64748b', fontSize: '0.73rem', marginTop: '0.1rem' }}>{c.email}</p>}
-
-          {/* Processing status */}
+          {c.email && <p style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '0.1rem' }}>{c.email}</p>}
           <div style={{ marginTop: '0.25rem' }}>
-            {c.processing_status === 'pending' && <span style={{ fontSize: '0.68rem', color: '#64748b' }}>⏳ Processing pending</span>}
+            {c.processing_status === 'pending' && <span style={{ fontSize: '0.68rem', color: '#64748b' }}>⏳ Pending</span>}
             {c.processing_status === 'processing' && <span style={{ fontSize: '0.68rem', color: '#6366f1' }}>⚡ Scoring…</span>}
-            {c.processing_status === 'failed' && <span style={{ fontSize: '0.68rem', color: '#ef4444' }}>⚠ Processing failed</span>}
+            {c.processing_status === 'failed' && <span style={{ fontSize: '0.68rem', color: '#ef4444' }}>⚠ Failed</span>}
           </div>
         </div>
       </div>
 
-      {/* Skills row */}
+      {/* Skills */}
       {topSkills.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
           {topSkills.map(s => <SkillChip key={s} label={s} />)}
@@ -121,23 +218,24 @@ function CandidateCard({ c, canUpdateStatus, onStatusChange }: {
         </div>
       )}
 
-      {/* Summary snippet */}
+      {/* Summary */}
       {c.summary && (
-        <p style={{ color: '#64748b', fontSize: '0.76rem', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+        <p style={{ color: '#64748b', fontSize: '0.75rem', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
           {c.summary}
         </p>
       )}
 
-      {/* Footer: pipeline status + recruiter + date */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.5rem', borderTop: '1px solid #1e2d4a', flexWrap: 'wrap', gap: '0.4rem' }}>
+      {/* Pipeline + Recruiter + Date row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
         <PipelineBadge status={c.status} />
+        {c.hiring_status && <HiringBadge status={c.hiring_status} />}
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-          {c.recruiter_name && <span style={{ color: '#475569', fontSize: '0.7rem' }}>👤 {c.recruiter_name}</span>}
-          <span style={{ color: '#475569', fontSize: '0.7rem' }}>🗓 {new Date(c.created_at).toLocaleDateString()}</span>
+          {c.recruiter_name && <span style={{ color: '#475569', fontSize: '0.68rem' }}>👤 {c.recruiter_name}</span>}
+          <span style={{ color: '#475569', fontSize: '0.68rem' }}>🗓 {new Date(c.created_at).toLocaleDateString()}</span>
         </div>
       </div>
 
-      {/* Actions row */}
+      {/* Actions: View Profile + Pipeline dropdown */}
       <div style={{ display: 'flex', gap: '0.5rem' }}>
         <Link
           href={`/dashboard/candidates/${c.id}`}
@@ -145,10 +243,10 @@ function CandidateCard({ c, canUpdateStatus, onStatusChange }: {
         >
           View Profile →
         </Link>
-        {canUpdateStatus && (
+        {canUpdatePipeline && (
           <select
             value={c.status}
-            onChange={e => onStatusChange(c.id, e.target.value)}
+            onChange={e => onPipelineChange(c.id, e.target.value)}
             style={{ background: '#111827', border: '1px solid #1e2d4a', borderRadius: '0.5rem', padding: '0.3rem 0.5rem', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer' }}
           >
             {PIPELINE_STATUSES.map(s => (
@@ -157,9 +255,16 @@ function CandidateCard({ c, canUpdateStatus, onStatusChange }: {
           </select>
         )}
       </div>
+
+      {/* Hiring Status editor (recruiter + TL) */}
+      {canUpdateHiring && (
+        <HiringStatusEditor c={c} onSave={onHiringChange} />
+      )}
     </div>
   );
 }
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CandidatesPage() {
   const { role } = useUserContext();
@@ -167,7 +272,8 @@ export default function CandidatesPage() {
   const [scoreFilter, setScoreFilter] = useState('');
   const queryClient = useQueryClient();
 
-  const canUpdateStatus = role === 'admin' || role === 'manager' || role === 'tl';
+  const canUpdatePipeline = role === 'admin' || role === 'manager' || role === 'tl';
+  const canUpdateHiring = role === 'recruiter' || role === 'tl' || role === 'manager' || role === 'admin';
 
   const { data: jobsData } = useQuery({ queryKey: ['jobs'], queryFn: () => jobsApi.list() });
   const jobs = jobsData?.jobs ?? [];
@@ -179,10 +285,20 @@ export default function CandidatesPage() {
   });
   const candidates = data?.candidates ?? [];
 
-  const statusMutation = useMutation({
+  const pipelineMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) => candidatesApi.updateStatus(id, status),
     onSuccess: () => {
-      toast.success('Status updated');
+      toast.success('Pipeline status updated');
+      queryClient.invalidateQueries({ queryKey: ['candidates', selectedJobId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const hiringMutation = useMutation({
+    mutationFn: ({ id, hiring_status, rejection_reason }: { id: string; hiring_status: string; rejection_reason?: string }) =>
+      candidatesApi.updateHiringStatus(id, hiring_status, rejection_reason),
+    onSuccess: (_, vars) => {
+      toast.success(`Hiring status set to "${HIRING_STATUSES.find(h => h.value === vars.hiring_status)?.label}"`);
       queryClient.invalidateQueries({ queryKey: ['candidates', selectedJobId] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -194,15 +310,12 @@ export default function CandidatesPage() {
       <div style={{ marginBottom: '1.75rem' }}>
         <h1 style={{ fontSize: '1.6rem', fontWeight: 700, color: '#e2e8f0' }}>📋 My Candidates</h1>
         <p style={{ color: '#64748b', marginTop: '0.25rem', fontSize: '0.875rem' }}>
-          {role === 'admin' || role === 'manager'
-            ? 'Candidate pipeline across jobs'
-            : 'Candidates you personally uploaded'}
+          {role === 'admin' || role === 'manager' ? 'Candidate pipeline across jobs' : 'Candidates you personally uploaded'}
         </p>
       </div>
 
       {/* Filters bar */}
       <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', padding: '1rem 1.25rem', marginBottom: '1.5rem', display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        {/* Job selector */}
         <div style={{ flex: '1 1 220px' }}>
           <label style={{ color: '#64748b', fontSize: '0.72rem', display: 'block', marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Select Job</label>
           <select value={selectedJobId} onChange={e => setSelectedJobId(e.target.value)}
@@ -213,10 +326,8 @@ export default function CandidatesPage() {
             ))}
           </select>
         </div>
-
-        {/* Score status filter */}
         <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-          {STATUS_FILTERS.map(f => (
+          {SCORE_FILTERS.map(f => (
             <button key={f.value} onClick={() => setScoreFilter(f.value)}
               style={{
                 padding: '0.35rem 0.8rem', borderRadius: '999px', border: '1px solid', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500, transition: 'all 0.15s',
@@ -228,8 +339,6 @@ export default function CandidatesPage() {
             </button>
           ))}
         </div>
-
-        {/* Count */}
         {selectedJobId && !isLoading && (
           <span style={{ marginLeft: 'auto', color: '#475569', fontSize: '0.78rem' }}>
             {candidates.length} candidate{candidates.length !== 1 ? 's' : ''}
@@ -266,13 +375,17 @@ export default function CandidatesPage() {
             </span>
             <Link href={`/dashboard/jobs/${selectedJobId}`} style={{ color: '#6366f1', fontSize: '0.8rem', textDecoration: 'none' }}>View Job →</Link>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))', gap: '1rem' }}>
             {candidates.map((c: Candidate) => (
               <CandidateCard
                 key={c.id}
                 c={c}
-                canUpdateStatus={canUpdateStatus}
-                onStatusChange={(id, status) => statusMutation.mutate({ id, status })}
+                canUpdatePipeline={canUpdatePipeline}
+                canUpdateHiring={canUpdateHiring}
+                onPipelineChange={(id, status) => pipelineMutation.mutate({ id, status })}
+                onHiringChange={(id, hiring_status, rejection_reason) =>
+                  hiringMutation.mutate({ id, hiring_status, rejection_reason })
+                }
               />
             ))}
           </div>
