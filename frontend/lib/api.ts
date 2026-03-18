@@ -432,10 +432,19 @@ export interface TalentPoolCandidate {
   experience_years: number | null;
   current_location: string | null;
   first_seen_job_title: string | null;
+  first_seen_job_id?: string | null;
   uploaded_by: string | null;
   uploaded_by_name: string | null;
   created_at: string;
   updated_at: string;
+  // Fields present in the single-record endpoint (GET /api/talent-pool/:id)
+  resume_hash?: string | null;
+  strengths?: string[];
+  weaknesses?: string[];
+  summary?: string | null;
+  score?: number | null;
+  score_status?: string | null;
+  resume_download_url?: string | null;
 }
 
 export interface AnalyticsData {

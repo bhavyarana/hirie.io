@@ -24,6 +24,33 @@ const STATUS_STYLES: Record<string, React.CSSProperties> = {
   failed: { background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' },
 };
 
+const HIRING_STATUSES: Record<string, { label: string; color: string }> = {
+  client_screening: { label: 'Client Screening', color: '#6366f1' },
+  interview_l1: { label: 'Interview – L1', color: '#8b5cf6' },
+  interview_l2: { label: 'Interview – L2', color: '#a855f7' },
+  interview_l3: { label: 'Interview – L3', color: '#d946ef' },
+  job_offered: { label: 'Job Offered', color: '#22c55e' },
+  rejected: { label: 'Rejected', color: '#ef4444' },
+  joined: { label: 'Joined', color: '#10b981' },
+  backout: { label: 'Backout', color: '#f59e0b' },
+  duplicate: { label: 'Duplicate', color: '#64748b' },
+};
+
+function HiringStatusBadge({ status }: { status: string | null }) {
+  if (!status) return <span style={{ color: '#475569', fontSize: '0.75rem' }}>—</span>;
+  const hs = HIRING_STATUSES[status];
+  if (!hs) return <span style={{ color: '#475569', fontSize: '0.75rem' }}>{status}</span>;
+  return (
+    <span style={{
+      padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 600,
+      background: `${hs.color}18`, color: hs.color, border: `1px solid ${hs.color}40`,
+      whiteSpace: 'nowrap',
+    }}>
+      {hs.label}
+    </span>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   return (
     <span style={{
@@ -306,7 +333,7 @@ export default function JobDetailPage({ params }: Props) {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: 'rgba(30,45,74,0.3)' }}>
-                      {['Resume File', 'Name / Contact', 'Score', 'Status', 'Processing', 'Action'].map(h => (
+                      {['Resume File', 'Name / Contact', 'Score', 'Status', 'Hiring Status', 'Recruiter', 'Processing', 'Action'].map(h => (
                         <th key={h} style={{ padding: '0.75rem 1.25rem', textAlign: 'left', color: '#64748b', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -345,6 +372,16 @@ export default function JobDetailPage({ params }: Props) {
                         </td>
                         <td style={{ padding: '1rem 1.25rem' }}>
                           {c.score_status ? <StatusBadge status={c.score_status} /> : <span style={{ color: '#475569', fontSize: '0.75rem' }}>—</span>}
+                        </td>
+                        <td style={{ padding: '1rem 1.25rem' }}>
+                          <HiringStatusBadge status={c.hiring_status} />
+                        </td>
+                        <td style={{ padding: '1rem 1.25rem', minWidth: '120px' }}>
+                          {c.recruiter_name ? (
+                            <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>👤 {c.recruiter_name}</span>
+                          ) : (
+                            <span style={{ color: '#475569', fontSize: '0.75rem' }}>—</span>
+                          )}
                         </td>
                         <td style={{ padding: '1rem 1.25rem' }}>
                           <StatusBadge status={c.processing_status} />

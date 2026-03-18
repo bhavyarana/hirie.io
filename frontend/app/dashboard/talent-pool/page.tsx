@@ -121,7 +121,7 @@ function CandidateCard({ c }: { c: TalentPoolCandidate }) {
 
       {/* View button */}
       <Link
-        href={`/dashboard/candidates/${c.candidate_id || c.id}`}
+        href={`/dashboard/talent-pool/${c.id}`}
         style={{
           display: 'block', textAlign: 'center', padding: '0.45rem',
           borderRadius: '0.5rem', background: 'rgba(99,102,241,0.1)',
