@@ -64,6 +64,8 @@ export default function JobDetailPage({ params }: Props) {
   const { id: jobId } = use(params);
   const [activeTab, setActiveTab] = useState<'candidates' | 'analytics'>('candidates');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [hiringStatusFilter, setHiringStatusFilter] = useState<string>('all');
+  const [uploadedByFilter, setUploadedByFilter] = useState<string>('all');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const queryClient = useQueryClient();
@@ -111,8 +113,22 @@ export default function JobDetailPage({ params }: Props) {
     : true; // non-recruiter roles are always allowed
   const canUpload = !isRecruiter || isAssignedRecruiter;
 
-  const filtered = statusFilter === 'all' ? candidates
-    : candidates.filter(c => c.score_status === statusFilter || c.processing_status === statusFilter);
+  const filtered = candidates.filter(c => {
+    if (statusFilter !== 'all' && c.score_status !== statusFilter && c.processing_status !== statusFilter) return false;
+    if (hiringStatusFilter !== 'all' && c.hiring_status !== hiringStatusFilter) return false;
+    if (uploadedByFilter !== 'all' && (c.recruiter_name || '') !== uploadedByFilter) return false;
+    return true;
+  });
+
+  // Distinct uploaders from the loaded candidates
+  const uploaderNames = [...new Set(candidates.map(c => c.recruiter_name).filter(Boolean))] as string[];
+  const hasFilters = statusFilter !== 'all' || hiringStatusFilter !== 'all' || uploadedByFilter !== 'all';
+
+  const SELECT_STYLE: React.CSSProperties = {
+    background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '0.5rem',
+    padding: '0.4rem 0.65rem', color: '#94a3b8', fontSize: '0.8rem',
+    outline: 'none', cursor: 'pointer', appearance: 'auto',
+  };
 
   const onDrop = useCallback(async (files: File[]) => {
     if (!files.length) return;
@@ -305,17 +321,69 @@ export default function JobDetailPage({ params }: Props) {
       {/* Candidates Tab */}
       {activeTab === 'candidates' && (
         <div>
-          {/* Filter */}
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-            {['all', 'pass', 'review', 'fail', 'pending', 'processing'].map(s => (
-              <button key={s} onClick={() => setStatusFilter(s)} style={{
-                padding: '0.375rem 0.875rem', borderRadius: '999px', cursor: 'pointer',
-                fontSize: '0.75rem', fontWeight: 500, textTransform: 'capitalize',
-                background: statusFilter === s ? '#6366f1' : '#0d1526',
-                color: statusFilter === s ? '#fff' : '#64748b',
-                border: `1px solid ${statusFilter === s ? '#6366f1' : '#1e2d4a'}`,
-              }}>{s}</button>
-            ))}
+          {/* ── Filter Bar ── */}
+          <div style={{
+            background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '0.875rem',
+            padding: '0.875rem 1.25rem', marginBottom: '1rem',
+            display: 'flex', flexWrap: 'wrap', gap: '0.875rem', alignItems: 'flex-end',
+          }}>
+
+            {/* Score Status */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+              <label style={{ color: '#64748b', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Score</label>
+              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={SELECT_STYLE}>
+                <option value="all">All Scores</option>
+                <option value="pass">✅ Pass</option>
+                <option value="review">⚡ Review</option>
+                <option value="fail">❌ Fail</option>
+                <option value="pending">⏳ Pending</option>
+                <option value="processing">⟳ Processing</option>
+              </select>
+            </div>
+
+            {/* Hiring Status */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+              <label style={{ color: '#64748b', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Hiring Status</label>
+              <select value={hiringStatusFilter} onChange={e => setHiringStatusFilter(e.target.value)} style={SELECT_STYLE}>
+                <option value="all">All Statuses</option>
+                {Object.entries(HIRING_STATUSES).map(([val, { label }]) => (
+                  <option key={val} value={val}>{label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Uploaded By */}
+            {uploaderNames.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <label style={{ color: '#64748b', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Uploaded By</label>
+                <select value={uploadedByFilter} onChange={e => setUploadedByFilter(e.target.value)} style={{ ...SELECT_STYLE, maxWidth: '180px' }}>
+                  <option value="all">All Recruiters</option>
+                  {uploaderNames.map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Results count + clear */}
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'flex-end', gap: '0.5rem' }}>
+              <span style={{ color: '#475569', fontSize: '0.78rem', paddingBottom: '0.35rem' }}>
+                {filtered.length} of {candidates.length}
+              </span>
+              {hasFilters && (
+                <button
+                  onClick={() => { setStatusFilter('all'); setHiringStatusFilter('all'); setUploadedByFilter('all'); }}
+                  style={{
+                    padding: '0.4rem 0.875rem', borderRadius: '999px', cursor: 'pointer',
+                    fontSize: '0.75rem', fontWeight: 500,
+                    background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.22)',
+                    color: '#f87171',
+                  }}
+                >
+                  ✕ Clear
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Table */}
