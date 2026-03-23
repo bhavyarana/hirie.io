@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDropzone } from 'react-dropzone';
 import { candidatesApi, analyticsApi, uploadResumes, exportCSV, type Candidate, usersApi } from '@/lib/api';
@@ -69,6 +69,8 @@ export default function JobDetailPage({ params }: Props) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const queryClient = useQueryClient();
+  // Track which candidate IDs we've already alerted for rejection (survives re-renders)
+  const alertedRejections = useRef<Set<string>>(new Set());
 
   const { data: currentUserData } = useQuery({ queryKey: ['me'], queryFn: () => usersApi.me() });
 
@@ -100,8 +102,31 @@ export default function JobDetailPage({ params }: Props) {
   const jobAssignments: JobAssignment[] = assignmentsData?.assignments ?? [];
 
   const job = jobData?.job;
-  const candidates: Candidate[] = candidatesData?.candidates ?? [];
+  const allCandidates: Candidate[] = candidatesData?.candidates ?? [];
   const analytics = analyticsData;
+
+  // Alert once per rejected candidate, delete from DB, then remove from list
+  useEffect(() => {
+    allCandidates.forEach(async (c) => {
+      if (c.processing_status === 'rejected' && !alertedRejections.current.has(c.id)) {
+        alertedRejections.current.add(c.id);
+        toast.error(
+          `⚠️ "${c.resume_file_name}" — Please upload a valid resume file`,
+          { duration: 8000, id: `rejected-${c.id}` }
+        );
+        // Delete from DB + storage + talent pool, then refresh the list
+        try {
+          await candidatesApi.delete(c.id);
+        } catch {
+          // Non-fatal: row still hidden from UI via filter below
+        }
+        queryClient.invalidateQueries({ queryKey: ['candidates', jobId] });
+      }
+    });
+  }, [allCandidates, jobId, queryClient]);
+
+  // Rejected candidates are hidden from the UI
+  const candidates = allCandidates.filter(c => c.processing_status !== 'rejected');
 
   // Determine upload permission:
   // - admin / manager / tl → always allowed

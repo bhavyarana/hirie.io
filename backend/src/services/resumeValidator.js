@@ -1,77 +1,63 @@
 /**
  * resumeValidator.js
- * Two-stage resume validation:
- *   1. Fast heuristic check (no AI, no network)
- *   2. AI classification via Mistral (only called if heuristic passes)
+ * Confidence-score-based resume validation:
+ *   Stage 1 — Heuristic confidence score (0–100, no network)
+ *   Stage 2 — Lenient AI classification (only for uncertain scores 30–59)
  */
 
 const mistral = require('../config/openai');
 const logger = require('../config/logger');
 
-// Keywords that commonly appear in resumes/CVs
+// Keywords that appear in resumes (diverse set to catch creative formats too)
 const RESUME_KEYWORDS = [
   'experience', 'education', 'skills', 'projects',
-  'work', 'summary', 'profile',
+  'about', 'profile', 'work',
 ];
 
-// Minimum matches required out of RESUME_KEYWORDS
-const MIN_KEYWORD_MATCHES = 3;
-
-// Minimum text length (chars) to be considered a real document
-const MIN_TEXT_LENGTH = 200;
-
-// Regex patterns for contact info (at least one must be present)
 const EMAIL_REGEX = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/;
 const PHONE_REGEX = /(\+?\d[\s\-.]?){7,15}/;
 
 /**
- * Stage 1 — Heuristic validation.
- * Fast, synchronous, zero network calls.
+ * Stage 1 — Heuristic confidence score.
+ * Purely synchronous, zero network calls.
  *
- * @param {string} text — raw extracted text from the resume file
- * @returns {{ valid: boolean, reason?: string }}
+ * Scoring:
+ *   +10 per matched keyword (max 70 from 7 keywords)
+ *   +20 if an email address is found
+ *   +10 if a phone number is found
+ *   +20 if text length > 150 chars
+ *
+ * @param {string} text — raw extracted resume text
+ * @returns {number} score 0–100
  */
-function isLikelyResume(text) {
-  if (!text || typeof text !== 'string') {
-    return { valid: false, reason: 'No text could be extracted from the file' };
-  }
+function getResumeScore(text) {
+  if (!text || typeof text !== 'string') return 0;
 
   const normalized = text.toLowerCase();
+  let score = 0;
 
-  // 1. Minimum length
-  if (text.length < MIN_TEXT_LENGTH) {
-    return {
-      valid: false,
-      reason: `Document too short (${text.length} chars). Minimum required: ${MIN_TEXT_LENGTH}`,
-    };
+  // Keyword matches: +10 each
+  for (const kw of RESUME_KEYWORDS) {
+    if (normalized.includes(kw)) score += 10;
   }
 
-  // 2. Keyword count
-  const matchedKeywords = RESUME_KEYWORDS.filter(kw => normalized.includes(kw));
-  if (matchedKeywords.length < MIN_KEYWORD_MATCHES) {
-    return {
-      valid: false,
-      reason: `Only ${matchedKeywords.length}/${MIN_KEYWORD_MATCHES} required resume keywords found (${matchedKeywords.join(', ') || 'none'})`,
-    };
-  }
+  // Contact info
+  if (EMAIL_REGEX.test(text)) score += 20;
+  if (PHONE_REGEX.test(text)) score += 10;
 
-  // 3. Contact info (email OR phone)
-  const hasEmail = EMAIL_REGEX.test(text);
-  const hasPhone = PHONE_REGEX.test(text);
-  if (!hasEmail && !hasPhone) {
-    return {
-      valid: false,
-      reason: 'No email address or phone number found in document',
-    };
-  }
+  // Minimum length bonus
+  if (text.length > 150) score += 20;
 
-  return { valid: true };
+  return Math.min(score, 100);
 }
 
 /**
- * Stage 2 — AI classification via Mistral.
- * Only called when the heuristic check passes.
- * Returns "VALID" or "INVALID".
+ * Stage 2 — Lenient AI classification via Mistral.
+ * Only called for uncertain heuristic scores (30–59).
+ * Returns VALID for creative/design/portfolio resumes.
+ * Rejects only clearly non-resume documents.
+ *
+ * Fails OPEN (returns VALID) if Mistral is unavailable.
  *
  * @param {string} text — raw extracted resume text
  * @returns {Promise<{ valid: boolean, reason?: string }>}
@@ -79,17 +65,22 @@ function isLikelyResume(text) {
 async function classifyResumeWithAI(text) {
   const excerpt = text.slice(0, 3000);
 
-  const prompt = `You are a strict document classifier.
+  const prompt = `You are a resume classifier.
 
-Determine if the following text is a professional resume/CV.
+Determine whether the given text is likely a resume or CV.
 
-Return ONLY one word:
+Return ONLY:
 VALID or INVALID
 
-Rules:
-- A VALID document must include candidate details like skills, experience, or education
-- Mark INVALID for: invoices, books, job descriptions, random text, contracts, or any irrelevant document
-- When in doubt, prefer VALID if the document looks like a personal professional profile
+IMPORTANT:
+- Accept modern, creative, or design-based resumes
+- Accept portfolios that include skills, experience, or projects
+- Do NOT reject based on formatting or design
+
+Reject ONLY if:
+- It is clearly not a resume (invoice, book, legal contract, random content, article)
+
+Be slightly lenient — when in doubt, return VALID.
 
 Text:
 """
@@ -102,7 +93,7 @@ ${excerpt}
       messages: [
         {
           role: 'system',
-          content: 'You are a strict document classifier. Respond with ONLY the word VALID or INVALID — no punctuation, no explanation.',
+          content: 'You are a lenient resume classifier. Respond with ONLY the word VALID or INVALID — no punctuation, no explanation.',
         },
         { role: 'user', content: prompt },
       ],
@@ -117,14 +108,12 @@ ${excerpt}
       return { valid: false, reason: 'AI classifier determined this is not a resume/CV' };
     }
 
-    // Treat any non-INVALID response as VALID (defensive: covers "VALID", partial text, etc.)
     return { valid: true };
   } catch (err) {
-    // If AI is unavailable (quota, network), fail open: let the document through
-    // Heuristic already passed so the document is likely legitimate
+    // Fail open — heuristic was borderline but document is not clearly invalid
     logger.warn(`[ResumeValidator] AI classification unavailable (${err.message.slice(0, 100)}) — treating as VALID`);
     return { valid: true };
   }
 }
 
-module.exports = { isLikelyResume, classifyResumeWithAI };
+module.exports = { getResumeScore, classifyResumeWithAI };

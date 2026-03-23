@@ -544,4 +544,45 @@ router.post('/candidates/:id/reprocess', authMiddleware, async (req, res) => {
   res.json({ message: 'Re-queued for processing', candidateId });
 });
 
+// DELETE /api/candidates/:id — remove candidate + storage file + talent pool entry
+router.delete('/candidates/:id', authMiddleware, async (req, res) => {
+  const candidateId = req.params.id;
+
+  const { data: candidate, error } = await supabase
+    .from('candidates')
+    .select('id, resume_file_path, resume_hash')
+    .eq('id', candidateId)
+    .single();
+
+  if (error || !candidate) {
+    return res.status(404).json({ error: 'Candidate not found' });
+  }
+
+  // 1. Delete from storage (non-fatal)
+  if (candidate.resume_file_path) {
+    await supabase.storage.from('resumes').remove([candidate.resume_file_path]).catch(err =>
+      logger.warn(`[Delete] Storage cleanup failed for ${candidateId}: ${err.message}`)
+    );
+  }
+
+  // 2. Remove talent pool entry matched by resume_hash (non-fatal)
+  if (candidate.resume_hash) {
+    try {
+      await supabase.from('talent_pool').delete().eq('resume_hash', candidate.resume_hash);
+    } catch (err) {
+      logger.warn(`[Delete] Talent pool cleanup failed for ${candidateId}: ${err.message}`);
+    }
+  }
+
+  // 3. Delete candidate row (cascades resume_scores via FK)
+  const { error: deleteError } = await supabase.from('candidates').delete().eq('id', candidateId);
+  if (deleteError) {
+    return res.status(500).json({ error: `Failed to delete candidate: ${deleteError.message}` });
+  }
+
+  logger.info(`[Delete] Candidate ${candidateId} deleted (storage + talent pool cleaned up)`);
+  res.json({ message: 'Candidate deleted' });
+});
+
 module.exports = router;
+

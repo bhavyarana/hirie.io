@@ -159,6 +159,8 @@ export const candidatesApi = {
   },
   reprocess: (id: string) =>
     apiFetch<{ message: string; candidateId: string }>(`/api/candidates/${id}/reprocess`, { method: 'POST' }),
+  delete: (id: string) =>
+    apiFetch<{ message: string }>(`/api/candidates/${id}`, { method: 'DELETE' }),
 };
 
 // ─── Resume upload ─────────────────────────────────────────────────────────
@@ -364,7 +366,7 @@ export interface Candidate {
   phone: string | null;
   resume_file_name: string;
   resume_hash?: string | null;
-  processing_status: 'pending' | 'processing' | 'completed' | 'failed';
+  processing_status: 'pending' | 'processing' | 'completed' | 'failed' | 'rejected';
   status: 'uploaded' | 'scored' | 'shortlisted' | 'interview' | 'rejected';
   error_message: string | null;
   score: number | null;

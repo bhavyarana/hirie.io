@@ -5,7 +5,7 @@ const supabase = require('../config/supabase');
 const { downloadFile } = require('../services/storageService');
 const { extractResumeText } = require('../services/parserService');
 const { scoreResume, getPlaceholderScore, extractCandidateProfile } = require('../services/openaiService');
-const { isLikelyResume, classifyResumeWithAI } = require('../services/resumeValidator');
+const { getResumeScore, classifyResumeWithAI } = require('../services/resumeValidator');
 const logger = require('../config/logger');
 
 /**
@@ -66,24 +66,31 @@ const worker = new Worker(
     logger.info(`[Worker] Extracted ${text.length} chars — candidate: ${JSON.stringify(basicInfo)}`);
 
     // ─────────────────────────────────────────────────────────────
-    // Step 3b: Stage 1 — Heuristic validation (fast, no API call)
+    // Step 3b: Heuristic confidence score (0–100, no API call)
     // ─────────────────────────────────────────────────────────────
-    const heuristicResult = isLikelyResume(text);
-    if (!heuristicResult.valid) {
-      await rejectCandidate(candidateId, fileName, `Invalid resume content: ${heuristicResult.reason}`);
-      return { candidateId, status: 'rejected', reason: 'heuristic', detail: heuristicResult.reason };
-    }
-    logger.info(`[Worker] Heuristic validation passed for "${fileName}"`);
+    const score = getResumeScore(text);
+    logger.info(`[Worker] Heuristic score: ${score}/100 for "${fileName}"`);
 
-    // ─────────────────────────────────────────────────────────────
-    // Step 3c: Stage 2 — AI classification (only if heuristic passes)
-    // ─────────────────────────────────────────────────────────────
-    const aiResult = await classifyResumeWithAI(text);
-    if (!aiResult.valid) {
-      await rejectCandidate(candidateId, fileName, 'Uploaded file is not a valid resume. Please upload a professional CV or resume document.');
-      return { candidateId, status: 'rejected', reason: 'ai_classifier', detail: aiResult.reason };
+    if (score < 30) {
+      // Clearly not a resume — reject immediately without spending an AI call
+      await rejectCandidate(candidateId, fileName, 'Invalid resume content: document does not resemble a resume or CV');
+      return { candidateId, status: 'rejected', reason: 'heuristic', score };
     }
-    logger.info(`[Worker] AI classification passed for "${fileName}" — proceeding with full processing`);
+
+    if (score < 60) {
+      // ─────────────────────────────────────────────────────────────
+      // Step 3c: Uncertain — send to lenient AI classifier
+      // ─────────────────────────────────────────────────────────────
+      logger.info(`[Worker] Score ${score} is uncertain — sending to AI classifier for "${fileName}"`);
+      const aiResult = await classifyResumeWithAI(text);
+      if (!aiResult.valid) {
+        await rejectCandidate(candidateId, fileName, 'Uploaded file is not a valid resume. Please upload a professional CV or resume document.');
+        return { candidateId, status: 'rejected', reason: 'ai_classifier', score, detail: aiResult.reason };
+      }
+      logger.info(`[Worker] AI classifier: VALID for "${fileName}" — proceeding`);
+    } else {
+      logger.info(`[Worker] Score ${score} — high confidence, skipping AI classifier for "${fileName}"`);
+    }
 
     // Step 4: Update candidate with extracted info + run talent profile extraction in parallel
     const [profileResult] = await Promise.all([
