@@ -5,7 +5,20 @@ const supabase = require('../config/supabase');
 const { downloadFile } = require('../services/storageService');
 const { extractResumeText } = require('../services/parserService');
 const { scoreResume, getPlaceholderScore, extractCandidateProfile } = require('../services/openaiService');
+const { isLikelyResume, classifyResumeWithAI } = require('../services/resumeValidator');
 const logger = require('../config/logger');
+
+/**
+ * Mark a candidate as rejected in the DB and log the reason.
+ * Returns cleanly so BullMQ considers the job completed (no retries).
+ */
+async function rejectCandidate(candidateId, fileName, reason) {
+  logger.warn(`[Worker] ✗ Rejected "${fileName}" (${candidateId}): ${reason}`);
+  await supabase
+    .from('candidates')
+    .update({ processing_status: 'rejected', error_message: reason })
+    .eq('id', candidateId);
+}
 
 const CONCURRENCY = parseInt(process.env.WORKER_CONCURRENCY || '5');
 
@@ -44,11 +57,33 @@ const worker = new Worker(
     logger.info(`[Worker] Extracting text from: ${fileName}`);
     const { text, basicInfo } = await extractResumeText(fileBuffer, mimeType);
 
+    // Step 3a: Handle empty / unreadable files (scanned PDFs, corrupt docs, etc.)
     if (!text || text.length < 50) {
-      throw new Error(`Could not extract sufficient text from resume: ${fileName}`);
+      await rejectCandidate(candidateId, fileName, 'Could not extract readable text from this file. It may be a scanned image, corrupted, or empty.');
+      return { candidateId, status: 'rejected', reason: 'unreadable' };
     }
 
     logger.info(`[Worker] Extracted ${text.length} chars — candidate: ${JSON.stringify(basicInfo)}`);
+
+    // ─────────────────────────────────────────────────────────────
+    // Step 3b: Stage 1 — Heuristic validation (fast, no API call)
+    // ─────────────────────────────────────────────────────────────
+    const heuristicResult = isLikelyResume(text);
+    if (!heuristicResult.valid) {
+      await rejectCandidate(candidateId, fileName, `Invalid resume content: ${heuristicResult.reason}`);
+      return { candidateId, status: 'rejected', reason: 'heuristic', detail: heuristicResult.reason };
+    }
+    logger.info(`[Worker] Heuristic validation passed for "${fileName}"`);
+
+    // ─────────────────────────────────────────────────────────────
+    // Step 3c: Stage 2 — AI classification (only if heuristic passes)
+    // ─────────────────────────────────────────────────────────────
+    const aiResult = await classifyResumeWithAI(text);
+    if (!aiResult.valid) {
+      await rejectCandidate(candidateId, fileName, 'Uploaded file is not a valid resume. Please upload a professional CV or resume document.');
+      return { candidateId, status: 'rejected', reason: 'ai_classifier', detail: aiResult.reason };
+    }
+    logger.info(`[Worker] AI classification passed for "${fileName}" — proceeding with full processing`);
 
     // Step 4: Update candidate with extracted info + run talent profile extraction in parallel
     const [profileResult] = await Promise.all([
