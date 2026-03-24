@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -61,17 +61,74 @@ const ROLE_LABELS: Record<string, string> = {
   recruiter: 'Recruiter',
 };
 
+/* ─── Chevron SVG icon ─────────────────────────────────────── */
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="14" height="14" viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth="2.5"
+      strokeLinecap="round" strokeLinejoin="round"
+      style={{
+        transition: 'transform 0.25s cubic-bezier(0.4,0,0.2,1)',
+        transform: open ? 'rotate(0deg)' : 'rotate(180deg)',
+        display: 'block',
+      }}
+    >
+      <polyline points="15 18 9 12 15 6" />
+    </svg>
+  );
+}
+
+/* ─── Mobile hamburger bars ─────────────────────────────────── */
+function HamburgerIcon({ open }: { open: boolean }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', width: '18px' }}>
+      <span style={{
+        display: 'block', height: '2px', background: 'var(--text-muted)', borderRadius: '2px',
+        transition: 'transform 0.25s ease, opacity 0.25s ease',
+        transform: open ? 'translateY(7px) rotate(45deg)' : 'none',
+      }} />
+      <span style={{
+        display: 'block', height: '2px', background: 'var(--text-muted)', borderRadius: '2px',
+        transition: 'opacity 0.25s ease',
+        opacity: open ? 0 : 1,
+      }} />
+      <span style={{
+        display: 'block', height: '2px', background: 'var(--text-muted)', borderRadius: '2px',
+        transition: 'transform 0.25s ease, opacity 0.25s ease',
+        transform: open ? 'translateY(-7px) rotate(-45deg)' : 'none',
+      }} />
+    </div>
+  );
+}
+
+/* ─── Main Layout ───────────────────────────────────────────── */
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const queryClient = useQueryClient();
   const { user, role, loading } = useUserContext();
 
-  // Redirect to login if unauthenticated (after loading completes)
+  // Desktop: sidebar expanded vs. icon-only collapsed
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Mobile: drawer open/closed
+  const [mobileOpen, setMobileOpen] = useState(false);
+  // Track whether we're on a mobile viewport
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile on mount and on resize
   useEffect(() => {
-    if (!loading && !user) {
-      window.location.href = '/login';
-    }
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  // Close mobile drawer on route change
+  useEffect(() => { setMobileOpen(false); }, [pathname]);
+
+  // Auth redirect
+  useEffect(() => {
+    if (!loading && !user) window.location.href = '/login';
   }, [loading, user]);
 
   const navItems = ROLE_NAV[role] ?? [];
@@ -79,14 +136,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   async function handleSignOut() {
     const supabase = createClient();
     await supabase.auth.signOut();
-    // Clear ALL cached data so the next user doesn't see stale data
     queryClient.clear();
     toast.success('Signed out');
-    // Hard redirect: fully reloads the app so no React state survives
     window.location.href = '/login';
   }
 
-  // Show nothing while loading or unauthenticated (redirect happening)
   if (loading || !user) {
     return (
       <div style={{ minHeight: '100vh', background: '#0a0f1e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -95,53 +149,89 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-base)' }}>
-      {/* Sidebar */}
-      <aside style={{
-        width: '240px', flexShrink: 0,
-        background: 'var(--bg-card)', borderRight: '1px solid var(--border)',
-        display: 'flex', flexDirection: 'column', padding: '1.5rem 0',
-        position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 40,
-      }}>
-        {/* Logo */}
-        <div style={{ padding: '0 1.25rem', marginBottom: '2rem' }}>
+  // Desktop sidebar width
+  const desktopSidebarW = sidebarOpen ? 240 : 64;
+  // On mobile the sidebar is an overlay, doesn't affect main layout
+  const mainMarginLeft = isMobile ? 0 : desktopSidebarW;
+
+  /* ── Sidebar inner content (shared between desktop & mobile) ── */
+  const sidebarContent = (isDrawer: boolean) => {
+    const expanded = isDrawer ? true : sidebarOpen;
+    return (
+      <>
+        {/* Logo row */}
+        <div style={{ padding: '0 1.25rem', marginBottom: '2rem', overflow: 'hidden', whiteSpace: 'nowrap' }}>
           <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '1.25rem' }}>🔮</span>
-            <span style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+            <span style={{ fontSize: '1.25rem', flexShrink: 0 }}>🔮</span>
+            <span style={{
+              fontSize: '1.125rem', fontWeight: 700, color: 'var(--text-primary)',
+              opacity: expanded ? 1 : 0,
+              transition: 'opacity 0.2s ease',
+              whiteSpace: 'nowrap',
+            }}>
               Resume<span style={{ color: '#6366f1' }}>Flow</span>
             </span>
           </Link>
         </div>
 
-        {/* Nav */}
-        <nav style={{ flex: 1, padding: '0 0.75rem' }}>
+        {/* Nav links */}
+        <nav style={{ flex: 1, padding: '0 0.75rem', overflow: 'hidden' }}>
           {navItems.map(item => {
             const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
             return (
-              <Link key={item.href} href={item.href} style={{
-                display: 'flex', alignItems: 'center', gap: '0.75rem',
-                padding: '0.625rem 0.75rem', borderRadius: '0.5rem', marginBottom: '0.25rem',
-                textDecoration: 'none', fontSize: '0.875rem', fontWeight: active ? 600 : 400,
-                color: active ? '#a5b4fc' : 'var(--text-muted)',
-                background: active ? 'var(--bg-active)' : 'transparent',
-                transition: 'all 0.15s',
-              }}>
-                <span>{item.icon}</span>
-                {item.label}
+              <Link
+                key={item.href}
+                href={item.href}
+                title={!expanded ? item.label : undefined}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '0.75rem',
+                  padding: '0.625rem 0.75rem', borderRadius: '0.5rem', marginBottom: '0.25rem',
+                  textDecoration: 'none', fontSize: '0.875rem', fontWeight: active ? 600 : 400,
+                  color: active ? '#a5b4fc' : 'var(--text-muted)',
+                  background: active ? 'var(--bg-active)' : 'transparent',
+                  transition: 'all 0.15s',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                }}
+                onMouseEnter={e => {
+                  if (!active) (e.currentTarget as HTMLAnchorElement).style.background = 'var(--bg-hover)';
+                }}
+                onMouseLeave={e => {
+                  if (!active) (e.currentTarget as HTMLAnchorElement).style.background = 'transparent';
+                }}
+              >
+                <span style={{ flexShrink: 0, fontSize: '1.1rem', lineHeight: 1 }}>{item.icon}</span>
+                <span style={{
+                  opacity: expanded ? 1 : 0,
+                  transition: 'opacity 0.15s ease',
+                  overflow: 'hidden',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {item.label}
+                </span>
               </Link>
             );
           })}
         </nav>
 
-        {/* Bottom: User info + Theme + Sign out */}
-        <div style={{ padding: '0 0.75rem', borderTop: '1px solid var(--border)', paddingTop: '1rem', marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          {/* User info */}
-          {!loading && user && (
+        {/* Bottom section */}
+        <div style={{
+          padding: '0 0.75rem',
+          borderTop: '1px solid var(--border)',
+          paddingTop: '1rem', marginTop: '0.5rem',
+          display: 'flex', flexDirection: 'column', gap: '0.5rem',
+          overflow: 'hidden',
+        }}>
+          {/* User card */}
+          {user && (
             <div style={{
               padding: '0.625rem 0.75rem', borderRadius: '0.5rem',
               background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.15)',
               marginBottom: '0.25rem',
+              opacity: expanded ? 1 : 0,
+              transition: 'opacity 0.15s ease',
+              overflow: 'hidden',
+              whiteSpace: 'nowrap',
             }}>
               <p style={{ color: 'var(--text-primary)', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.2rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {user.name || user.email}
@@ -159,36 +249,169 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           )}
 
           {/* Theme toggle */}
-          <div style={{ padding: '0 0.25rem' }}>
-            <ThemeToggle />
+          <div style={{ padding: '0 0.25rem', overflow: 'hidden' }}>
+            <div style={{ opacity: expanded ? 1 : 0, transition: 'opacity 0.15s ease', whiteSpace: 'nowrap' }}>
+              <ThemeToggle />
+            </div>
           </div>
 
-          <button onClick={handleSignOut} style={{
-            width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem',
-            padding: '0.625rem 0.75rem', borderRadius: '0.5rem',
-            background: 'transparent', border: 'none', cursor: 'pointer',
-            color: 'var(--text-muted)', fontSize: '0.875rem', textAlign: 'left',
-            transition: 'all 0.15s',
-          }}
+          {/* Sign out */}
+          <button
+            onClick={handleSignOut}
+            title={!expanded ? 'Sign Out' : undefined}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem',
+              padding: '0.625rem 0.75rem', borderRadius: '0.5rem',
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: 'var(--text-muted)', fontSize: '0.875rem', textAlign: 'left',
+              transition: 'all 0.15s', whiteSpace: 'nowrap', overflow: 'hidden',
+            }}
             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(239,68,68,0.08)'; (e.currentTarget as HTMLButtonElement).style.color = '#ef4444'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'; }}>
-            <span>🚪</span> Sign Out
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'; }}
+          >
+            <span style={{ flexShrink: 0 }}>🚪</span>
+            <span style={{ opacity: expanded ? 1 : 0, transition: 'opacity 0.15s ease' }}>Sign Out</span>
           </button>
         </div>
-      </aside>
+      </>
+    );
+  };
 
-      {/* Main content */}
-      <main style={{ marginLeft: '240px', flex: 1, overflowX: 'hidden' }}>
-        {/* Top bar */}
-        <div style={{
-          position: 'sticky', top: 0, zIndex: 30,
-          background: 'rgba(var(--bg-base-rgb, 10,15,30), 0.85)', backdropFilter: 'blur(12px)',
-          borderBottom: '1px solid var(--border)',
-          padding: '0.75rem 2rem',
-          display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.75rem',
+  return (
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-base)' }}>
+
+      {/* ── MOBILE: backdrop overlay ─────────────────────────── */}
+      {isMobile && mobileOpen && (
+        <div
+          onClick={() => setMobileOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 45,
+            background: 'rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(2px)',
+            animation: 'fadeIn 0.2s ease',
+          }}
+        />
+      )}
+
+      {/* ── MOBILE: drawer sidebar ───────────────────────────── */}
+      {isMobile && (
+        <aside style={{
+          position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 50,
+          width: '240px',
+          background: 'var(--bg-card)',
+          borderRight: '1px solid var(--border)',
+          display: 'flex', flexDirection: 'column', padding: '1.5rem 0',
+          transform: mobileOpen ? 'translateX(0)' : 'translateX(-100%)',
+          transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+          boxShadow: mobileOpen ? '4px 0 30px rgba(0,0,0,0.3)' : 'none',
         }}>
-          <NotificationBell />
+          {sidebarContent(true)}
+        </aside>
+      )}
+
+      {/* ── DESKTOP: fixed sidebar ───────────────────────────── */}
+      {!isMobile && (
+        <aside style={{
+          width: `${desktopSidebarW}px`,
+          flexShrink: 0,
+          background: 'var(--bg-card)',
+          borderRight: '1px solid var(--border)',
+          display: 'flex', flexDirection: 'column',
+          padding: '1.5rem 0',
+          position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 40,
+          transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+          overflow: 'visible',   /* allow the arrow button to overflow */
+        }}>
+          {sidebarContent(false)}
+
+          {/* ── Arrow collapse toggle — sits on the right edge ── */}
+          <button
+            onClick={() => setSidebarOpen(prev => !prev)}
+            aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+            style={{
+              position: 'absolute',
+              top: '50%',
+              right: '-14px',
+              transform: 'translateY(-50%)',
+              width: '28px', height: '28px',
+              borderRadius: '50%',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer',
+              color: 'var(--text-muted)',
+              transition: 'background 0.15s, color 0.15s, box-shadow 0.15s',
+              zIndex: 50,
+              padding: 0,
+            }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLButtonElement).style.background = '#6366f1';
+              (e.currentTarget as HTMLButtonElement).style.color = '#fff';
+              (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 2px 12px rgba(99,102,241,0.4)';
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-card)';
+              (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)';
+              (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+            }}
+          >
+            <ChevronIcon open={sidebarOpen} />
+          </button>
+        </aside>
+      )}
+
+      {/* ── Main content area ─────────────────────────────────── */}
+      <main style={{
+        marginLeft: `${mainMarginLeft}px`,
+        flex: 1,
+        minWidth: 0,
+        overflowX: 'hidden',
+        transition: 'margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+      }}>
+        {/* ── Topbar ── */}
+        <div className="dashboard-topbar" style={{
+          position: 'sticky', top: 0, zIndex: 30,
+          background: 'rgba(var(--bg-base-rgb, 10,15,30), 0.85)',
+          backdropFilter: 'blur(12px)',
+          borderBottom: '1px solid var(--border)',
+          padding: '0.75rem 1.5rem',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem',
+        }}>
+          {/* Mobile hamburger (left side, mobile only) */}
+          {isMobile && (
+            <button
+              onClick={() => setMobileOpen(prev => !prev)}
+              aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+              style={{
+                width: '36px', height: '36px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                borderRadius: '0.5rem',
+                transition: 'background 0.15s',
+                flexShrink: 0,
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              <HamburgerIcon open={mobileOpen} />
+            </button>
+          )}
+
+          {/* Mobile: brand in topbar */}
+          {isMobile && (
+            <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', flex: 1 }}>
+              🔮 Resume<span style={{ color: '#6366f1' }}>Flow</span>
+            </span>
+          )}
+
+          {/* Right side — always visible */}
+          {!isMobile && <div style={{ flex: 1 }} />}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <NotificationBell />
+          </div>
         </div>
+
         {children}
       </main>
     </div>
