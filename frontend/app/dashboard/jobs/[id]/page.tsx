@@ -426,7 +426,7 @@ export default function JobDetailPage({ params }: Props) {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: 'rgba(30,45,74,0.3)' }}>
-                      {['Resume File', 'Name / Contact', 'Score', 'Status', 'Hiring Status', 'Recruiter', 'Processing', 'Action'].map(h => (
+                      {['Name / Contact', 'Score', 'Status', 'Hiring Status', 'Recruiter', 'Processing', 'Action'].map(h => (
                         <th key={h} style={{ padding: '0.75rem 1.25rem', textAlign: 'left', color: '#64748b', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -436,9 +436,9 @@ export default function JobDetailPage({ params }: Props) {
                       <tr key={c.id} style={{ borderTop: '1px solid #1e2d4a', transition: 'background 0.15s' }}
                         onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(99,102,241,0.04)'}
                         onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}>
-                        <td style={{ padding: '1rem 1.25rem' }}>
+                        {/* <td style={{ padding: '1rem 1.25rem' }}>
                           <p style={{ color: '#94a3b8', fontWeight: 500, fontSize: '0.8rem' }}>{c.resume_file_name}</p>
-                        </td>
+                        </td> */}
                         <td style={{ padding: '1rem 1.25rem', minWidth: '180px' }}>
                           {c.name ? (
                             <>
