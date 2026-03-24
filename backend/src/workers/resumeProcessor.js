@@ -1,16 +1,16 @@
 require('dotenv').config();
 const { Worker, MetricsTime } = require('bullmq');
-const redisConnection = require('../config/redis');
-const supabase = require('../config/supabase');
+const redisConnection  = require('../config/redis');
+const supabase         = require('../config/supabase');
 const { downloadFile } = require('../services/storageService');
 const { extractResumeText } = require('../services/parserService');
-const { scoreResume, getPlaceholderScore, extractCandidateProfile } = require('../services/openaiService');
-const { getResumeScore, classifyResumeWithAI } = require('../services/resumeValidator');
+const { parseAndScoreResume, getPlaceholderScore } = require('../services/openaiService');
+const { getResumeScore, classifyResumeWithAI }     = require('../services/resumeValidator');
 const logger = require('../config/logger');
 
 /**
- * Mark a candidate as rejected in the DB and log the reason.
- * Returns cleanly so BullMQ considers the job completed (no retries).
+ * Mark a candidate as rejected and log the reason.
+ * BullMQ treats this as a successful job completion (no retries).
  */
 async function rejectCandidate(candidateId, fileName, reason) {
   logger.warn(`[Worker] ✗ Rejected "${fileName}" (${candidateId}): ${reason}`);
@@ -36,88 +36,99 @@ const worker = new Worker(
       scoringCriteria,
     } = job.data;
 
-    logger.info(`[Worker] Processing: ${fileName} (candidate: ${candidateId})`);
+    logger.info(`[Worker] ▶ Processing: "${fileName}" (candidate: ${candidateId})`);
 
-    // Step 1: Mark as processing
+    // ── Step 1: Mark as processing ─────────────────────────────────────────────
     await supabase
       .from('candidates')
       .update({ processing_status: 'processing' })
       .eq('id', candidateId);
 
-    // Step 2: Download from Supabase Storage
+    // ── Step 2: Download from Supabase Storage ─────────────────────────────────
     logger.info(`[Worker] Downloading: ${storagePath}`);
     const fileBuffer = await downloadFile(storagePath);
 
-    const ext = storagePath.split('.').pop().toLowerCase();
+    const ext      = storagePath.split('.').pop().toLowerCase();
     const mimeType = ext === 'pdf'
       ? 'application/pdf'
       : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-    // Step 3: Extract text
-    logger.info(`[Worker] Extracting text from: ${fileName}`);
-    const { text, basicInfo } = await extractResumeText(fileBuffer, mimeType);
+    // ── Step 3: Extract text (local, no AI cost) ───────────────────────────────
+    logger.info(`[Worker] Extracting text from: "${fileName}"`);
+    const { text, hints } = await extractResumeText(fileBuffer, mimeType);
 
-    // Step 3a: Handle empty / unreadable files (scanned PDFs, corrupt docs, etc.)
+    // ── Step 3a: Reject unreadable files ──────────────────────────────────────
     if (!text || text.length < 50) {
-      await rejectCandidate(candidateId, fileName, 'Could not extract readable text from this file. It may be a scanned image, corrupted, or empty.');
+      await rejectCandidate(candidateId, fileName,
+        'Could not extract readable text. The file may be a scanned image, corrupted, or empty.');
       return { candidateId, status: 'rejected', reason: 'unreadable' };
     }
 
-    logger.info(`[Worker] Extracted ${text.length} chars — candidate: ${JSON.stringify(basicInfo)}`);
+    logger.info(`[Worker] Extracted ${text.length} chars from "${fileName}"`);
 
-    // ─────────────────────────────────────────────────────────────
-    // Step 3b: Heuristic confidence score (0–100, no API call)
-    // ─────────────────────────────────────────────────────────────
-    const score = getResumeScore(text);
-    logger.info(`[Worker] Heuristic score: ${score}/100 for "${fileName}"`);
+    // ── Step 3b: Heuristic validation (free, no API) ──────────────────────────
+    const heuristicScore = getResumeScore(text);
+    logger.info(`[Worker] Heuristic score: ${heuristicScore}/100 for "${fileName}"`);
 
-    if (score < 30) {
-      // Clearly not a resume — reject immediately without spending an AI call
-      await rejectCandidate(candidateId, fileName, 'Invalid resume content: document does not resemble a resume or CV');
-      return { candidateId, status: 'rejected', reason: 'heuristic', score };
+    if (heuristicScore < 30) {
+      await rejectCandidate(candidateId, fileName,
+        'Invalid resume content: document does not resemble a resume or CV.');
+      return { candidateId, status: 'rejected', reason: 'heuristic', score: heuristicScore };
     }
 
-    if (score < 60) {
-      // ─────────────────────────────────────────────────────────────
-      // Step 3c: Uncertain — send to lenient AI classifier
-      // ─────────────────────────────────────────────────────────────
-      logger.info(`[Worker] Score ${score} is uncertain — sending to AI classifier for "${fileName}"`);
+    if (heuristicScore < 60) {
+      logger.info(`[Worker] Score ${heuristicScore} is borderline — AI classification for "${fileName}"`);
       const aiResult = await classifyResumeWithAI(text);
       if (!aiResult.valid) {
-        await rejectCandidate(candidateId, fileName, 'Uploaded file is not a valid resume. Please upload a professional CV or resume document.');
-        return { candidateId, status: 'rejected', reason: 'ai_classifier', score, detail: aiResult.reason };
+        await rejectCandidate(candidateId, fileName,
+          'Uploaded file is not a valid resume. Please upload a professional CV or resume document.');
+        return { candidateId, status: 'rejected', reason: 'ai_classifier', detail: aiResult.reason };
       }
-      logger.info(`[Worker] AI classifier: VALID for "${fileName}" — proceeding`);
+      logger.info(`[Worker] AI classifier: VALID — proceeding with "${fileName}"`);
     } else {
-      logger.info(`[Worker] Score ${score} — high confidence, skipping AI classifier for "${fileName}"`);
+      logger.info(`[Worker] High-confidence resume (${heuristicScore}) — skipping AI classifier for "${fileName}"`);
     }
 
-    // Step 4: Update candidate with extracted info + run talent profile extraction in parallel
-    const [profileResult] = await Promise.all([
-      // Extract talent profile for search indexing (fire-and-forget style, never throws)
-      extractCandidateProfile(text).catch(() => ({ skills: [], titles: [], experience_years: null, location: null })),
-      // Update basic candidate info (name, email, phone from parser)
-      supabase.from('candidates').update({
-        name: basicInfo.name,
-        email: basicInfo.email,
-        phone: basicInfo.phone,
-      }).eq('id', candidateId),
-    ]);
+    // ── Step 4: ONE AI call — parse + score everything ────────────────────────
+    let basicInfo, profile, scoreResult;
 
-    // Persist extracted talent profile for search
-    if (profileResult.skills.length > 0 || profileResult.titles.length > 0 || profileResult.experience_years != null) {
-      await supabase.from('candidates').update({
-        extracted_skills: profileResult.skills,
-        extracted_titles: profileResult.titles,
-        experience_years: profileResult.experience_years,
-        current_location: profileResult.location,
-      }).eq('id', candidateId);
-      logger.info(`[Worker] Profile extracted: ${profileResult.skills.length} skills, ${profileResult.titles.length} titles, ${profileResult.experience_years}yr exp`);
-    }
-
-    // Sync extracted profile back to talent_pool row (matched by resume_hash)
     try {
-      // Look up the candidate to get its resume_hash
+      logger.info(`[Worker] Calling parseAndScoreResume for "${fileName}"…`);
+      ({ basicInfo, profile, scoreResult } = await parseAndScoreResume(
+        text,
+        jobDescription,
+        jobTitle,
+        scoringCriteria || null,
+        hints, // regex seeds: { email, phone }
+      ));
+      logger.info(`[Worker] AI result → name:"${basicInfo.name}" email:${basicInfo.email} phone:${basicInfo.phone} score:${scoreResult.score} (${scoreResult.status})`);
+    } catch (aiErr) {
+      // AI unavailable (quota / key missing / network) → degrade gracefully
+      logger.warn(`[Worker] AI unavailable for "${fileName}" (${aiErr.message?.slice(0, 80)}) — using placeholder`);
+      basicInfo   = { name: null, email: hints.email || null, phone: hints.phone || null };
+      profile     = { skills: [], titles: [], experience_years: null, location: null };
+      scoreResult = getPlaceholderScore();
+    }
+
+    // ── Step 5: Persist candidate contact info + profile ──────────────────────
+    await supabase.from('candidates').update({
+      name : basicInfo.name,
+      email: basicInfo.email,
+      phone: basicInfo.phone,
+    }).eq('id', candidateId);
+
+    if (profile.skills.length > 0 || profile.titles.length > 0 || profile.experience_years != null) {
+      await supabase.from('candidates').update({
+        extracted_skills: profile.skills,
+        extracted_titles: profile.titles,
+        experience_years: profile.experience_years,
+        current_location: profile.location,
+      }).eq('id', candidateId);
+      logger.info(`[Worker] Profile → ${profile.skills.length} skills, ${profile.titles.length} titles, ${profile.experience_years}yr exp`);
+    }
+
+    // ── Step 5b: Sync to talent_pool ──────────────────────────────────────────
+    try {
       const { data: candidateRow } = await supabase
         .from('candidates')
         .select('resume_hash')
@@ -134,7 +145,6 @@ const worker = new Worker(
         if (poolEntry) {
           const newEmail = basicInfo.email || null;
 
-          // If we now have an email, check if another pool entry already has this email
           if (newEmail) {
             const { data: emailConflict } = await supabase
               .from('talent_pool')
@@ -144,84 +154,63 @@ const worker = new Worker(
               .maybeSingle();
 
             if (emailConflict) {
-              // Another entry already owns this email — remove our duplicate placeholder
               await supabase.from('talent_pool').delete().eq('id', poolEntry.id);
               logger.info(`[TalentPool] Removed duplicate pool entry ${poolEntry.id} (email ${newEmail} already exists)`);
             } else {
-              // Safe to update with full profile
               await supabase.from('talent_pool').update({
-                email: newEmail,
-                name: basicInfo.name || null,
-                phone: basicInfo.phone || null,
-                extracted_skills: profileResult.skills || [],
-                extracted_titles: profileResult.titles || [],
-                experience_years: profileResult.experience_years,
-                current_location: profileResult.location,
+                email           : newEmail,
+                name            : basicInfo.name  || null,
+                phone           : basicInfo.phone || null,
+                extracted_skills: profile.skills  || [],
+                extracted_titles: profile.titles  || [],
+                experience_years: profile.experience_years,
+                current_location: profile.location,
               }).eq('id', poolEntry.id);
-              logger.info(`[TalentPool] Updated pool entry ${poolEntry.id} with extracted profile`);
+              logger.info(`[TalentPool] Updated pool entry ${poolEntry.id}`);
             }
           } else {
-            // No email yet — still update skills/location/name
+            // No email — still update profile fields
             await supabase.from('talent_pool').update({
-              name: basicInfo.name || null,
-              phone: basicInfo.phone || null,
-              extracted_skills: profileResult.skills || [],
-              extracted_titles: profileResult.titles || [],
-              experience_years: profileResult.experience_years,
-              current_location: profileResult.location,
+              name            : basicInfo.name  || null,
+              phone           : basicInfo.phone || null,
+              extracted_skills: profile.skills  || [],
+              extracted_titles: profile.titles  || [],
+              experience_years: profile.experience_years,
+              current_location: profile.location,
             }).eq('id', poolEntry.id);
-            logger.info(`[TalentPool] Updated pool entry ${poolEntry.id} (no email extracted)`);
+            logger.info(`[TalentPool] Updated pool entry ${poolEntry.id} (no email)`);
           }
         }
       }
     } catch (poolErr) {
-      // Non-fatal
       logger.warn(`[TalentPool] Sync failed for candidate ${candidateId}: ${poolErr.message}`);
     }
 
-    // Step 5: Score with Mistral AI — gracefully degrade on ANY AI error
-    let scoreResult;
-    try {
-      logger.info(`[Worker] Scoring "${fileName}" with Mistral…`);
-      scoreResult = await scoreResume(text, jobDescription, jobTitle, scoringCriteria || null);
-      logger.info(`[Worker] Score: ${scoreResult.score} (${scoreResult.status}) for "${fileName}"`);
-    } catch (aiErr) {
-      // ANY AI failure (missing key, quota exceeded, network, etc.) → use placeholder
-      // This ensures candidates always reach 'completed' and are visible in the UI
-      logger.warn(`[Worker] AI scoring unavailable for "${fileName}" (${aiErr.message.slice(0, 80)}) — using placeholder`);
-      scoreResult = getPlaceholderScore();
-    }
-
-
-    // Step 6: Save score — delete existing then insert fresh (no unique constraint on candidate_id)
+    // ── Step 6: Save score ─────────────────────────────────────────────────────
     await supabase.from('resume_scores').delete().eq('candidate_id', candidateId);
 
-    const { error: scoreError } = await supabase
-      .from('resume_scores')
-      .insert({
-        candidate_id: candidateId,
-        score: scoreResult.score,
-        status: scoreResult.status,
-        strengths: scoreResult.strengths,
-        weaknesses: scoreResult.weaknesses,
-        matched_skills: scoreResult.matched_skills,
-        missing_skills: scoreResult.missing_skills,
-        experience_match: scoreResult.experience_match,
-        education_match: scoreResult.education_match,
-        summary: scoreResult.summary,
-      });
+    const { error: scoreError } = await supabase.from('resume_scores').insert({
+      candidate_id    : candidateId,
+      score           : scoreResult.score,
+      status          : scoreResult.status,
+      strengths       : scoreResult.strengths,
+      weaknesses      : scoreResult.weaknesses,
+      matched_skills  : scoreResult.matched_skills,
+      missing_skills  : scoreResult.missing_skills,
+      experience_match: scoreResult.experience_match,
+      education_match : scoreResult.education_match,
+      summary         : scoreResult.summary,
+    });
 
-    if (scoreError) {
-      throw new Error(`Failed to save score: ${scoreError.message}`);
-    }
+    if (scoreError) throw new Error(`Failed to save score: ${scoreError.message}`);
 
-    // Step 7: Mark completed
+    // ── Step 7: Mark completed ─────────────────────────────────────────────────
     await supabase
       .from('candidates')
       .update({ processing_status: 'completed' })
       .eq('id', candidateId);
 
-    logger.info(`[Worker] ✓ Completed: ${fileName} → Score: ${scoreResult.score}`);
+    logger.info(`[Worker] ✓ Completed: "${fileName}" → Score: ${scoreResult.score} (${scoreResult.status}), Name: "${basicInfo.name}"`);
     return { candidateId, score: scoreResult.score, status: scoreResult.status };
   },
   {
@@ -231,7 +220,8 @@ const worker = new Worker(
   }
 );
 
-// Event handlers
+// ── Event handlers ────────────────────────────────────────────────────────────
+
 worker.on('completed', (job, result) => {
   logger.info(`[Worker] Job ${job.id} completed:`, result);
 });
@@ -242,10 +232,7 @@ worker.on('failed', async (job, error) => {
     try {
       await supabase
         .from('candidates')
-        .update({
-          processing_status: 'failed',
-          error_message: error.message,
-        })
+        .update({ processing_status: 'failed', error_message: error.message })
         .eq('id', job.data.candidateId);
     } catch (updateErr) {
       logger.error('[Worker] Failed to update candidate error status:', updateErr.message);
@@ -261,7 +248,7 @@ worker.on('ready', () => {
   logger.info(`[Worker] Resume processor ready (concurrency: ${CONCURRENCY})`);
 });
 
-// Graceful shutdown
+// ── Graceful shutdown ─────────────────────────────────────────────────────────
 process.on('SIGTERM', async () => { await worker.close(); process.exit(0); });
 process.on('SIGINT',  async () => { await worker.close(); process.exit(0); });
 

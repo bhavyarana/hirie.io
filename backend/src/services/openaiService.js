@@ -1,237 +1,248 @@
 const mistral = require('../config/openai');
-const logger = require('../config/logger');
+const logger  = require('../config/logger');
 
-// Default scoring criteria if a job has none configured
+// ─── Default scoring criteria ──────────────────────────────────────────────────
+
 const DEFAULT_CRITERIA = {
-  pass_threshold: 70,
+  pass_threshold  : 70,
   review_threshold: 50,
   weights: {
     technical_skills: 35,
-    experience: 30,
-    education: 20,
-    soft_skills: 15,
+    experience      : 30,
+    education       : 20,
+    soft_skills     : 15,
   },
 };
 
 function getStatus(score, criteria = DEFAULT_CRITERIA) {
-  const pass = criteria.pass_threshold ?? 70;
+  const pass   = criteria.pass_threshold   ?? 70;
   const review = criteria.review_threshold ?? 50;
-  if (score >= pass) return 'pass';
+  if (score >= pass)   return 'pass';
   if (score >= review) return 'review';
   return 'fail';
 }
 
+// ─── Phone normalisation helper ────────────────────────────────────────────────
+
+function normalisePhone(raw) {
+  if (!raw) return null;
+  const digits = String(raw).replace(/\D/g, '');
+  let local = digits;
+  if (local.startsWith('0091') && local.length >= 14) local = local.slice(4);
+  else if (local.startsWith('91') && local.length === 12) local = local.slice(2);
+  else if (local.startsWith('0')  && local.length === 11) local = local.slice(1);
+  return /^[6-9]\d{9}$/.test(local) ? local : null;
+}
+
+// ─── Unified Parse + Score (ONE API call) ────────────────────────────────────
+
 /**
- * Production-grade ATS resume scoring using Mistral AI.
- * Evaluates resume against job description across 4 weighted dimensions.
- * Uses job-specific scoring_criteria if provided.
+ * Production-grade, single-call resume processing.
+ *
+ * Extracts:  name, email, phone, skills, job titles, experience years, location
+ * Scores:    ATS score, dimension scores, strengths, weaknesses, matched/missing skills, summary
+ *
+ * All in ONE Mistral API call — maximises accuracy, minimises cost.
+ *
+ * @param {string} resumeText       - Full normalised resume text
+ * @param {string} jobDescription   - Job description text
+ * @param {string} jobTitle         - Job title string
+ * @param {object|null} scoringCriteria - Optional custom scoring weights/thresholds
+ * @param {object} hints            - Regex-derived seeds: { email, phone }
+ * @returns {{ basicInfo, profile, scoreResult }}
  */
-async function scoreResume(resumeText, jobDescription, jobTitle, scoringCriteria = null) {
-  const criteria = scoringCriteria || DEFAULT_CRITERIA;
-  const weights = criteria.weights || DEFAULT_CRITERIA.weights;
-  const passThreshold = criteria.pass_threshold ?? DEFAULT_CRITERIA.pass_threshold;
-  const reviewThreshold = criteria.review_threshold ?? DEFAULT_CRITERIA.review_threshold;
+async function parseAndScoreResume(resumeText, jobDescription, jobTitle, scoringCriteria = null, hints = {}) {
+  const criteria       = scoringCriteria  || DEFAULT_CRITERIA;
+  const weights        = criteria.weights || DEFAULT_CRITERIA.weights;
+  const wTech          = weights.technical_skills ?? 35;
+  const wExp           = weights.experience       ?? 30;
+  const wEdu           = weights.education        ?? 20;
+  const wSoft          = weights.soft_skills      ?? 15;
+  const passThreshold  = criteria.pass_threshold   ?? DEFAULT_CRITERIA.pass_threshold;
+  const reviewThreshold= criteria.review_threshold ?? DEFAULT_CRITERIA.review_threshold;
 
-  const wTech = weights.technical_skills ?? 35;
-  const wExp = weights.experience ?? 30;
-  const wEdu = weights.education ?? 20;
-  const wSoft = weights.soft_skills ?? 15;
+  // Regex hints improve extraction accuracy without an extra API call
+  const hintLines = [
+    hints.email ? `Detected email (from document scan): ${hints.email}` : '',
+    hints.phone ? `Detected phone (from document scan): ${hints.phone}` : '',
+  ].filter(Boolean).join('\n');
 
-  const prompt = `You are a senior ATS (Applicant Tracking System) engine and expert technical recruiter with 15+ years of hiring experience across top tech companies. Your task is to objectively evaluate a candidate's resume against a specific job description and return a precise, structured JSON assessment.
+  const prompt = `You are a senior ATS engine, expert technical recruiter, and resume parser with 15+ years of experience. In ONE pass, extract candidate contact details and profile from the resume, then score it against the job description. Return ONLY a valid JSON object — no markdown, no code fences, no extra text.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-JOB INFORMATION
-━━━━━━━━━━━━━━━━━━━━━━━━━━
+${hintLines ? `━━━ DOCUMENT HINTS (use to confirm contact details) ━━━\n${hintLines}\n` : ''}
+━━━ JOB INFORMATION ━━━
 Job Title: ${jobTitle}
 
 Job Description:
-${jobDescription.slice(0, 3500)}
+${jobDescription.slice(0, 3000)}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-CANDIDATE RESUME
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-${resumeText.slice(0, 4500)}
+━━━ CANDIDATE RESUME ━━━
+${resumeText.slice(0, 5000)}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-SCORING RUBRIC (follow STRICTLY)
-━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━ CONTACT EXTRACTION RULES ━━━
+- name: The candidate's full personal name ONLY (e.g. "Rahul Kumar Sharma"). Title-case it.
+  DO NOT include job titles, company names, or any label text. Look at the very top of the resume.
+  If the resume is ALL-CAPS, convert to Title Case.
+- email: Return the email address exactly as written, or null.
+- phone: Strip country code (+91 / 91 / 0091). Return 10 digits only (must start with 6-9). Return null if not found.
 
-Evaluate the candidate on FOUR dimensions, each scored 0–100:
+━━━ SCORING RUBRIC ━━━
+Score four dimensions 0-100:
+1. TECHNICAL SKILLS    (weight: ${wTech}%)
+2. EXPERIENCE          (weight: ${wExp}%)
+3. EDUCATION           (weight: ${wEdu}%)
+4. SOFT SKILLS         (weight: ${wSoft}%)
 
-1. TECHNICAL & DOMAIN SKILLS (weight: ${wTech}%)
-   - Does the candidate have the specific tools, frameworks, languages, or domain knowledge listed in the JD?
-   - 90-100: Meets or exceeds ALL required technical skills plus nice-to-haves
-   - 70-89: Meets most required skills (≥75%) with minor gaps in secondary areas
-   - 50-69: Meets core skills but lacks multiple required technologies or domain knowledge
-   - 30-49: Has some relevant skills but significant gaps in primary requirements
-   - 0-29: Minimal alignment with technical requirements
+final_score = (technical×${wTech/100}) + (experience×${wExp/100}) + (education×${wEdu/100}) + (soft_skills×${wSoft/100})
+- PASS:   score ≥ ${passThreshold}
+- REVIEW: score ≥ ${reviewThreshold} and < ${passThreshold}
+- FAIL:   score < ${reviewThreshold}
 
-2. PROFESSIONAL EXPERIENCE & SENIORITY (weight: ${wExp}%)
-   - Years of relevant experience, seniority level alignment, role responsibilities, industry relevance
-   - 90-100: Experience level is a perfect match or exceeds the role's requirements
-   - 70-89: Solid experience aligned with 75%+ of required responsibilities
-   - 50-69: Partially relevant experience; some role mismatch in scope or seniority
-   - 30-49: Limited relevant experience; significant gaps in scope or years
-   - 0-29: Little to no relevant professional experience
+━━━ ACCURACY RULES ━━━
+- Scores must reflect genuine gaps. Do NOT default to 85 for everyone.
+- Strengths and weaknesses must be SPECIFIC to this candidate.
+- Summary must mention the candidate's name, key technologies, and primary gap.
 
-3. EDUCATION & CERTIFICATIONS (weight: ${wEdu}%)
-   - Degree relevance, institution quality, certifications, training aligned to the role
-   - 90-100: Degree in exact field required + relevant certifications
-   - 70-89: Degree in related field OR strong compensating certifications
-   - 50-69: Education is tangentially related or candidate is self-taught with evidence
-   - 30-49: Unrelated degree, no certifications; relies purely on experience
-   - 0-29: No formal education or certifications relevant to the role
-
-4. COMMUNICATION & SOFT SKILLS (weight: ${wSoft}%)
-   - Leadership, teamwork, communication, problem-solving based on described accomplishments
-   - 90-100: Strong evidence of leadership, clear quantified achievements, excellent communication
-   - 70-89: Good evidence of collaboration and ownership; at least some quantified results
-   - 50-69: Generic soft skill mentions; limited evidence of leadership or measurable impact
-   - 30-49: Vague role descriptions; minimal evidence of soft skills or initiative
-   - 0-29: No evidence of soft skills or interpersonal contributions
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-FINAL SCORE CALCULATION
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-final_score = (technical_skills_score × ${wTech/100}) + (experience_score × ${wExp/100}) + (education_score × ${wEdu/100}) + (soft_skills_score × ${wSoft/100})
-
-Thresholds for this job:
-- PASS: final_score ≥ ${passThreshold}
-- REVIEW: final_score ≥ ${reviewThreshold} and < ${passThreshold}
-- FAIL: final_score < ${reviewThreshold}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-IMPORTANT ACCURACY RULES
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Be PRECISE and DIFFERENTIATED. Similar resumes for the same job MUST receive different scores if their qualifications differ.
-- Do NOT default to 85 for everyone. Scores should reflect genuine gaps and strengths.
-- Extract ONLY skills explicitly mentioned in the resume or reasonably inferred from described work.
-- Missing_skills must be pulled from the JD requirements — not invented.
-- Summary must mention the CANDIDATE'S NAME if visible, specific technologies, and concrete gaps.
-- Strengths and weaknesses must be SPECIFIC to this candidate — no generic statements.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-REQUIRED OUTPUT FORMAT
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-Return ONLY this JSON object — no markdown, no explanations, no code fences:
+━━━ REQUIRED JSON OUTPUT ━━━
 {
-  "score": <final weighted score, 0-100, decimal allowed>,
+  "name": "<full name, Title Case, personal name only>",
+  "email": "<email or null>",
+  "phone": "<10-digit number string or null>",
+  "skills": [<up to 30 technical and professional skills>],
+  "titles": [<up to 10 job titles held or inferred>],
+  "experience_years": <total years as number or null>,
+  "location": "<city/region or null>",
+  "score": <final weighted score 0-100, decimals allowed>,
   "dimension_scores": {
     "technical_skills": <0-100>,
     "experience": <0-100>,
     "education": <0-100>,
     "soft_skills": <0-100>
   },
-  "strengths": [<3-5 specific, evidence-based strengths from the resume>],
-  "weaknesses": [<2-4 specific gaps vs. the JD requirements>],
-  "matched_skills": [<skills from JD that candidate demonstrably has>],
-  "missing_skills": [<required skills from JD that candidate lacks>],
-  "experience_match": <experience dimension score alias, same as dimension_scores.experience>,
-  "education_match": <education dimension score alias, same as dimension_scores.education>,
-  "summary": "<3-4 sentence professional assessment: who the candidate is, their key relevant experience, their strongest alignment with the role, and the primary gap or concern>"
+  "strengths": [<3-5 specific evidence-based strengths>],
+  "weaknesses": [<2-4 specific gaps vs JD>],
+  "matched_skills": [<skills from JD the candidate has>],
+  "missing_skills": [<required JD skills the candidate lacks>],
+  "experience_match": <same value as dimension_scores.experience>,
+  "education_match": <same value as dimension_scores.education>,
+  "summary": "<3-4 sentence professional assessment: name, key experience, alignment, primary gap>"
 }`;
 
-  try {
-    const response = await mistral.chat.complete({
-      model: process.env.MISTRAL_MODEL || 'mistral-small-latest',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a precision ATS engine. You return ONLY valid JSON with no extra text, no markdown, and no code blocks. Every score must be justified by concrete evidence in the resume.',
+  const MAX_RETRIES = 3;
+  let lastErr = null;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await mistral.chat.complete({
+        model: process.env.MISTRAL_MODEL || 'mistral-small-latest',
+        messages: [
+          {
+            role   : 'system',
+            content: 'You are a precision ATS engine and resume parser. Return ONLY valid JSON — no markdown, no code blocks, no explanations.',
+          },
+          { role: 'user', content: prompt },
+        ],
+        temperature   : 0,
+        responseFormat: { type: 'json_object' },
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) throw new Error('Empty response from Mistral');
+
+      const parsed = JSON.parse(content);
+
+      // ── Normalise phone ──
+      let phone = null;
+      if (parsed.phone && String(parsed.phone) !== 'null') {
+        phone = normalisePhone(String(parsed.phone));
+      }
+      // Fall back to regex hint if AI couldn't find it
+      if (!phone && hints.phone) phone = hints.phone;
+
+      // ── Normalise email ──
+      let email = null;
+      if (parsed.email && String(parsed.email) !== 'null' && parsed.email.includes('@')) {
+        email = String(parsed.email).trim().toLowerCase();
+      }
+      if (!email && hints.email) email = hints.email;
+
+      // ── Normalise name ──
+      let name = null;
+      if (parsed.name && String(parsed.name) !== 'null') {
+        name = String(parsed.name).trim();
+        // Reject obvious garbage (too long, contains digits, all lowercase single word)
+        if (name.length > 60 || /\d/.test(name) || (!name.includes(' ') && name === name.toLowerCase())) {
+          name = null;
+        }
+      }
+
+      const score = Math.max(0, Math.min(100, parseFloat(parsed.score) || 0));
+
+      logger.info(`[AI] parseAndScore attempt ${attempt} OK → name:"${name}" email:${email} phone:${phone} score:${score}`);
+
+      return {
+        basicInfo: { name, email, phone },
+        profile: {
+          skills          : Array.isArray(parsed.skills) ? parsed.skills.slice(0, 30).map(s => String(s).trim()).filter(Boolean) : [],
+          titles          : Array.isArray(parsed.titles) ? parsed.titles.slice(0, 10).map(t => String(t).trim()).filter(Boolean) : [],
+          experience_years: parsed.experience_years != null ? (parseFloat(parsed.experience_years) || null) : null,
+          location        : (parsed.location && String(parsed.location) !== 'null') ? String(parsed.location).trim() : null,
         },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.1,
-      responseFormat: { type: 'json_object' },
-    });
+        scoreResult: {
+          score,
+          status          : getStatus(score, criteria),
+          strengths       : Array.isArray(parsed.strengths)      ? parsed.strengths.slice(0, 6)      : [],
+          weaknesses      : Array.isArray(parsed.weaknesses)     ? parsed.weaknesses.slice(0, 5)     : [],
+          matched_skills  : Array.isArray(parsed.matched_skills) ? parsed.matched_skills.slice(0, 25): [],
+          missing_skills  : Array.isArray(parsed.missing_skills) ? parsed.missing_skills.slice(0, 20): [],
+          experience_match: Math.max(0, Math.min(100, parseFloat(parsed.experience_match || parsed.dimension_scores?.experience) || 0)),
+          education_match : Math.max(0, Math.min(100, parseFloat(parsed.education_match  || parsed.dimension_scores?.education)  || 0)),
+          dimension_scores: parsed.dimension_scores || null,
+          summary         : parsed.summary || 'Unable to generate summary.',
+        },
+      };
+    } catch (err) {
+      lastErr = err;
 
-    const content = response.choices[0]?.message?.content;
-    if (!content) throw new Error('Empty response from Mistral');
+      const isQuota = err.status === 429 || err.statusCode === 429 ||
+        (err.message && (err.message.includes('429') || err.message.includes('quota') || err.message.includes('rate limit')));
 
-    const parsed = JSON.parse(content);
-    const score = Math.max(0, Math.min(100, parseFloat(parsed.score) || 0));
+      if (isQuota) {
+        logger.warn(`[AI] Quota/rate-limit hit — not retrying`);
+        break;
+      }
 
-    return {
-      score,
-      status: getStatus(score, criteria),
-      strengths: Array.isArray(parsed.strengths) ? parsed.strengths.slice(0, 6) : [],
-      weaknesses: Array.isArray(parsed.weaknesses) ? parsed.weaknesses.slice(0, 5) : [],
-      matched_skills: Array.isArray(parsed.matched_skills) ? parsed.matched_skills.slice(0, 25) : [],
-      missing_skills: Array.isArray(parsed.missing_skills) ? parsed.missing_skills.slice(0, 20) : [],
-      experience_match: Math.max(0, Math.min(100, parseFloat(parsed.experience_match || parsed.dimension_scores?.experience) || 0)),
-      education_match: Math.max(0, Math.min(100, parseFloat(parsed.education_match || parsed.dimension_scores?.education) || 0)),
-      dimension_scores: parsed.dimension_scores || null,
-      summary: parsed.summary || 'Unable to generate summary.',
-    };
-  } catch (err) {
-    const isQuotaError = err.status === 429 || err.statusCode === 429
-      || (err.message && (err.message.includes('429') || err.message.includes('quota') || err.message.includes('rate limit')));
-    const error = new Error(err.message);
-    error.isQuotaError = isQuotaError;
-    throw error;
+      if (attempt < MAX_RETRIES) {
+        const delay = attempt * 1200; // 1.2 s, 2.4 s
+        logger.warn(`[AI] parseAndScore attempt ${attempt}/${MAX_RETRIES} failed (${err.message?.slice(0, 80)}) — retry in ${delay}ms`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
   }
+
+  // All retries exhausted — propagate
+  const isQuotaError = lastErr?.status === 429 ||
+    (lastErr?.message && (lastErr.message.includes('429') || lastErr.message.includes('quota') || lastErr.message.includes('rate limit')));
+  const error = new Error(lastErr?.message || 'parseAndScoreResume failed after retries');
+  error.isQuotaError = isQuotaError;
+  throw error;
 }
 
-/**
- * Extract a talent profile from raw resume text (for candidate search indexing).
- */
-async function extractCandidateProfile(resumeText) {
-  const prompt = `You are a resume parser. Extract key information from this resume and return ONLY a valid JSON object.
+// ─── Placeholder score when AI is unavailable ─────────────────────────────────
 
-RESUME:
-${resumeText.slice(0, 4000)}
-
-Return ONLY this JSON — no extra text, no markdown:
-{
-  "skills": [<list of technical and professional skills, max 30 items>],
-  "titles": [<list of job titles and roles mentioned or inferred, max 10 items>],
-  "experience_years": <total years of professional experience as a number, or null if unclear>,
-  "location": "<city or region if mentioned, or null>"
-}`;
-
-  try {
-    const response = await mistral.chat.complete({
-      model: process.env.MISTRAL_MODEL || 'mistral-small-latest',
-      messages: [
-        { role: 'system', content: 'You are a resume parser AI. Always respond with valid JSON only, no markdown.' },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.1,
-      responseFormat: { type: 'json_object' },
-    });
-
-    const content = response.choices[0]?.message?.content;
-    if (!content) throw new Error('Empty response');
-
-    const parsed = JSON.parse(content);
-    return {
-      skills: Array.isArray(parsed.skills) ? parsed.skills.slice(0, 30).map(s => String(s).trim()).filter(Boolean) : [],
-      titles: Array.isArray(parsed.titles) ? parsed.titles.slice(0, 10).map(t => String(t).trim()).filter(Boolean) : [],
-      experience_years: parsed.experience_years != null ? (parseFloat(parsed.experience_years) || null) : null,
-      location: parsed.location ? String(parsed.location).trim() : null,
-    };
-  } catch (err) {
-    logger.warn(`[extractCandidateProfile] Failed: ${err.message} — using empty profile`);
-    return { skills: [], titles: [], experience_years: null, location: null };
-  }
-}
-
-/**
- * Placeholder score when Mistral is unavailable.
- */
 function getPlaceholderScore() {
   return {
-    score: 0,
-    status: 'review',
-    strengths: [],
-    weaknesses: [],
-    matched_skills: [],
-    missing_skills: [],
+    score           : 0,
+    status          : 'review',
+    strengths       : [],
+    weaknesses      : [],
+    matched_skills  : [],
+    missing_skills  : [],
     experience_match: 0,
-    education_match: 0,
+    education_match : 0,
     dimension_scores: null,
-    summary: 'AI scoring unavailable — Mistral API key not set or quota exceeded. Add your MISTRAL_API_KEY to backend/.env.',
+    summary         : 'AI scoring unavailable — Mistral API key not set or quota exceeded. Add your MISTRAL_API_KEY to backend/.env.',
   };
 }
 
-module.exports = { scoreResume, getStatus, getPlaceholderScore, extractCandidateProfile };
+module.exports = { parseAndScoreResume, getStatus, getPlaceholderScore };

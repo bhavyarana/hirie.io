@@ -121,6 +121,7 @@ export default function CandidateDetailPage({ params }: Props) {
           <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
             {candidate.email && <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>✉️ {candidate.email}</span>}
             {candidate.phone && <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>📞 {candidate.phone}</span>}
+            {candidate.current_location && <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>📍 {candidate.current_location}</span>}
             {candidate.recruiter_name && (
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: '0.3rem',

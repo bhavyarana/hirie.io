@@ -382,6 +382,7 @@ export interface Candidate {
   hiring_status: string | null;
   rejection_reason: string | null;
   hiring_feedback: string | null;
+  current_location: string | null;
   created_at: string;
 }
 
