@@ -36,37 +36,90 @@ router.get('/analytics/dashboard', authMiddleware, async (req, res) => {
   }
 });
 
-// ─── Legacy: GET /api/jobs/:id/analytics ─────────────────────────────────────
+// ─── GET /api/jobs/:id/analytics ─────────────────────────────────────────────
 router.get('/jobs/:id/analytics', authMiddleware, async (req, res) => {
   const { id: jobId } = req.params;
-  const { data: job } = await supabase.from('jobs').select('id, job_title, company_name').eq('id', jobId).single();
+
+  const { data: job } = await supabase
+    .from('jobs')
+    .select('id, job_title, company_name')
+    .eq('id', jobId)
+    .single();
   if (!job) return res.status(404).json({ error: 'Job not found' });
 
-  const { data: scores } = await supabase.from('resume_scores')
-    .select('score, status, matched_skills, missing_skills, strengths, weaknesses, experience_match, education_match')
-    .eq('job_id', jobId);
+  // Join resume_scores to get score data (same pattern as candidates list endpoint)
+  const { data: rows, error } = await supabase
+    .from('candidates')
+    .select('id, processing_status, resume_scores(score, status, matched_skills, missing_skills, strengths)')
+    .eq('job_id', jobId)
+    .eq('processing_status', 'completed');
 
-  if (!scores || scores.length === 0) {
-    return res.json({ job, total_candidates: 0, pass_count: 0, review_count: 0, fail_count: 0, average_score: 0, score_distribution: [], top_matched_skills: [], top_missing_skills: [], top_strengths: [] });
+  if (error) {
+    logger.error('[Analytics] Job analytics query error: ' + error.message);
+    return res.status(500).json({ error: error.message });
   }
 
-  const distribution = Array.from({ length: 10 }, (_, i) => ({ range: `${i * 10}-${i * 10 + 10}`, count: 0 }));
+  // Flatten score data from joined resume_scores
+  const scored = (rows || []).map(c => ({
+    score: c.resume_scores?.[0]?.score ?? null,
+    score_status: c.resume_scores?.[0]?.status ?? null,
+    matched_skills: c.resume_scores?.[0]?.matched_skills ?? [],
+    missing_skills: c.resume_scores?.[0]?.missing_skills ?? [],
+    strengths: c.resume_scores?.[0]?.strengths ?? [],
+  })).filter(c => c.score !== null);
+
+  if (!scored.length) {
+    return res.json({
+      job,
+      total_candidates: (rows || []).length,
+      pass_count: 0, review_count: 0, fail_count: 0,
+      average_score: 0, score_distribution: [], top_matched_skills: [],
+      top_missing_skills: [], top_strengths: [],
+    });
+  }
+
+  const distribution = Array.from({ length: 10 }, (_, i) => ({
+    range: `${i * 10}-${i * 10 + 10}`,
+    count: 0,
+  }));
+
   let totalScore = 0, passCount = 0, reviewCount = 0, failCount = 0;
   const matchedSkillMap = {}, missingSkillMap = {}, strengthMap = {};
-  scores.forEach(s => {
-    totalScore += parseFloat(s.score || 0);
-    if (s.status === 'pass') passCount++;
-    else if (s.status === 'review') reviewCount++;
+
+  scored.forEach(c => {
+    const score = parseFloat(c.score || 0);
+    totalScore += score;
+    if (c.score_status === 'pass') passCount++;
+    else if (c.score_status === 'review') reviewCount++;
     else failCount++;
-    const bucket = Math.min(Math.floor(parseFloat(s.score || 0) / 10), 9);
+    const bucket = Math.min(Math.floor(score / 10), 9);
     distribution[bucket].count++;
-    (s.matched_skills || []).forEach(sk => { matchedSkillMap[sk] = (matchedSkillMap[sk] || 0) + 1; });
-    (s.missing_skills || []).forEach(sk => { missingSkillMap[sk] = (missingSkillMap[sk] || 0) + 1; });
-    (s.strengths || []).forEach(sk => { strengthMap[sk] = (strengthMap[sk] || 0) + 1; });
+    (c.matched_skills || []).forEach(sk => { matchedSkillMap[sk] = (matchedSkillMap[sk] || 0) + 1; });
+    (c.missing_skills || []).forEach(sk => { missingSkillMap[sk] = (missingSkillMap[sk] || 0) + 1; });
+    (c.strengths || []).forEach(sk => { strengthMap[sk] = (strengthMap[sk] || 0) + 1; });
   });
-  const sortByCount = map => Object.entries(map).sort(([, a], [, b]) => b - a).slice(0, 10).map(([skill, count]) => ({ skill, count }));
-  res.json({ job, total_candidates: scores.length, pass_count: passCount, review_count: reviewCount, fail_count: failCount, average_score: parseFloat((totalScore / scores.length).toFixed(1)), score_distribution: distribution, top_matched_skills: sortByCount(matchedSkillMap), top_missing_skills: sortByCount(missingSkillMap), top_strengths: sortByCount(strengthMap) });
+
+  const sortByCount = map =>
+    Object.entries(map)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 10)
+      .map(([skill, count]) => ({ skill, count }));
+
+  res.json({
+    job,
+    total_candidates: scored.length,
+    pass_count: passCount,
+    review_count: reviewCount,
+    fail_count: failCount,
+    average_score: parseFloat((totalScore / scored.length).toFixed(1)),
+    score_distribution: distribution,
+    top_matched_skills: sortByCount(matchedSkillMap),
+    top_missing_skills: sortByCount(missingSkillMap),
+    top_strengths: sortByCount(strengthMap),
+  });
 });
+
+
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  ADMIN

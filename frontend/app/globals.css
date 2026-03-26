@@ -55,8 +55,8 @@
 
   --text-primary: #0f172a;
   --text-secondary: #1e293b;
-  --text-muted: #475569;
-  --text-faint: #64748b;
+  --text-muted: #374151;
+  --text-faint: #4b5563;
 
   --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.08);
   --shadow-accent: 0 0 30px rgba(99, 102, 241, 0.2);
@@ -227,22 +227,43 @@ textarea::placeholder {
   color: #334155 !important;
 }
 
-/* Secondary text — keep readable */
+/* Secondary text — darkened for light mode readability */
 [data-theme="light"] [style*="color: #94a3b8"],
 [data-theme="light"] [style*="color:#94a3b8"] {
-  color: #475569 !important;
+  color: #374151 !important;
 }
 
-/* Muted text — already reasonable, but ensure not invisible */
+/* Muted text — darkened */
 [data-theme="light"] [style*="color: #64748b"],
 [data-theme="light"] [style*="color:#64748b"] {
-  color: #64748b !important;
+  color: #4b5563 !important;
 }
 
-/* Faint text — darken for readability */
+/* Faint text — darkened */
 [data-theme="light"] [style*="color: #475569"],
 [data-theme="light"] [style*="color:#475569"] {
-  color: #475569 !important;
+  color: #374151 !important;
+}
+
+/* Active / link indigo colors — too light on white, darken to indigo-600 */
+[data-theme="light"] [style*="color: #a5b4fc"],
+[data-theme="light"] [style*="color:#a5b4fc"] {
+  color: #4f46e5 !important;
+}
+
+[data-theme="light"] [style*="color: #a78bfa"],
+[data-theme="light"] [style*="color:#a78bfa"] {
+  color: #7c3aed !important;
+}
+
+[data-theme="light"] [style*="color: #8b5cf6"],
+[data-theme="light"] [style*="color:#8b5cf6"] {
+  color: #6d28d9 !important;
+}
+
+/* Table column headers — keep slate-600 which is readable */
+[data-theme="light"] th {
+  color: #374151 !important;
 }
 
 /* ── Sidebar / secondary bg regions ── */
