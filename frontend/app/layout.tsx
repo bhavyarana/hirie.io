@@ -6,7 +6,7 @@ import { Providers } from './providers';
 const geist = Geist({ subsets: ['latin'], variable: '--font-geist-sans' });
 
 export const metadata: Metadata = {
-  title: 'Hirie.io — AI-Powered Candidate Screening',
+  title: 'Hirie.io',
   description: 'Screen candidates 10x faster with AI-powered resume analysis and ranking.',
   icons: { icon: '/logo.png' },
 };
