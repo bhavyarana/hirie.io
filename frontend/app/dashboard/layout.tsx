@@ -280,6 +280,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-base)' }}>
 
+      {/* ── Fixed notification bell — always top-right ─────────── */}
+      <div style={{ position: 'fixed', top: '1rem', right: '1.25rem', zIndex: 60 }}>
+        <NotificationBell />
+      </div>
+
       {/* ── MOBILE: backdrop overlay ─────────────────────────── */}
       {isMobile && mobileOpen && (
         <div
@@ -361,6 +366,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </aside>
       )}
 
+      {/* ── MOBILE: floating hamburger button ────────────────── */}
+      {isMobile && (
+        <button
+          onClick={() => setMobileOpen(prev => !prev)}
+          aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+          style={{
+            position: 'fixed', top: '1rem', left: '1rem', zIndex: 55,
+            width: '40px', height: '40px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: '0.625rem', cursor: 'pointer',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+            transition: 'background 0.15s',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-card)')}
+        >
+          <HamburgerIcon open={mobileOpen} />
+        </button>
+      )}
+
       {/* ── Main content area ─────────────────────────────────── */}
       <main style={{
         marginLeft: `${mainMarginLeft}px`,
@@ -368,50 +394,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         minWidth: 0,
         overflowX: 'hidden',
         transition: 'margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        paddingTop: isMobile ? '4rem' : 0,
       }}>
-        {/* ── Topbar ── */}
-        <div className="dashboard-topbar" style={{
-          position: 'sticky', top: 0, zIndex: 30,
-          background: 'rgba(var(--bg-base-rgb, 10,15,30), 0.85)',
-          backdropFilter: 'blur(12px)',
-          borderBottom: '1px solid var(--border)',
-          padding: '0.75rem 1.5rem',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem',
-        }}>
-          {/* Mobile hamburger (left side, mobile only) */}
-          {isMobile && (
-            <button
-              onClick={() => setMobileOpen(prev => !prev)}
-              aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
-              style={{
-                width: '36px', height: '36px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'transparent', border: 'none', cursor: 'pointer',
-                borderRadius: '0.5rem',
-                transition: 'background 0.15s',
-                flexShrink: 0,
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-            >
-              <HamburgerIcon open={mobileOpen} />
-            </button>
-          )}
-
-          {/* Mobile: brand in topbar */}
-          {isMobile && (
-            <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', flex: 1 }}>
-              Hirie<span style={{ color: '#6366f1' }}>.io</span>
-            </span>
-          )}
-
-          {/* Right side — always visible */}
-          {!isMobile && <div style={{ flex: 1 }} />}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <NotificationBell />
-          </div>
-        </div>
-
         {children}
       </main>
     </div>
