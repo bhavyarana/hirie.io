@@ -1,4 +1,4 @@
-# ResumeFlow — AI-Powered Candidate Screening
+# Hirie.io — AI-Powered Candidate Screening
 
 An end-to-end SaaS ATS (Applicant Tracking System) that lets recruiters batch-upload resumes and get AI-scored, ranked candidates in minutes.
 
@@ -21,7 +21,7 @@ An end-to-end SaaS ATS (Applicant Tracking System) that lets recruiters batch-up
 ## Project Structure
 
 ```
-ResumeFlowProd/
+Hirie.io/
 ├── frontend/               # Next.js 16 App
 │   ├── app/
 │   │   ├── page.tsx              # Landing page
