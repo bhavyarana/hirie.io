@@ -84,9 +84,9 @@ export default function LandingPage() {
         transition: 'background 0.3s, border-color 0.3s',
       }}>
         <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '1.375rem' }}>🔮</span>
+          <img src="/logo.png" alt="Hirie.io" style={{ width: '28px', height: '28px', objectFit: 'contain' }} />
           <span style={{ fontSize: '1.125rem', fontWeight: 800, color: t.textPrimary, letterSpacing: '-0.01em' }}>
-            Resume<span style={{ color: '#6366f1' }}>Flow</span>
+            Hirie<span style={{ color: '#6366f1' }}>.io</span>
           </span>
         </Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
@@ -137,7 +137,7 @@ export default function LandingPage() {
 
             {/* Sub */}
             <p style={{ fontSize: 'clamp(1rem, 2vw, 1.2rem)', color: t.textMuted, maxWidth: '620px', lineHeight: 1.75, marginBottom: '2.75rem', animation: 'fadeInUp 0.5s ease 0.2s both' }}>
-              From AI resume scoring to org-wide analytics — ResumeFlow is the command center for every team in your hiring org. Not just an ATS. A full hiring intelligence platform.
+              From AI resume scoring to org-wide analytics — Hirie.io is the command center for every team in your hiring org. Not just an ATS. A full hiring intelligence platform.
             </p>
 
             {/* CTAs */}
@@ -276,10 +276,10 @@ export default function LandingPage() {
       {/* ── Footer ──────────────────────────────────────────────────────── */}
       <footer style={{ padding: '1.75rem 2.5rem', borderTop: `1px solid ${t.navBorder}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', background: t.pageBg, transition: 'all 0.3s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          <span style={{ fontSize: '1rem' }}>🔮</span>
-          <span style={{ color: t.footerBrandClr, fontSize: '0.8rem', fontWeight: 600 }}>Resume<span style={{ color: '#6366f1' }}>Flow</span></span>
+          <img src="/logo.png" alt="Hirie.io" style={{ width: '20px', height: '20px', objectFit: 'contain' }} />
+          <span style={{ color: t.footerBrandClr, fontSize: '0.8rem', fontWeight: 600 }}>Hirie<span style={{ color: '#6366f1' }}>.io</span></span>
         </div>
-        <p style={{ color: t.footerCopyClr, fontSize: '0.75rem', margin: 0 }}>© 2026 ResumeFlow · AI Hiring Intelligence Platform</p>
+        <p style={{ color: t.footerCopyClr, fontSize: '0.75rem', margin: 0 }}>© 2026 Hirie.io · AI Hiring Intelligence Platform</p>
         <Link href="/login" style={{ color: '#6366f1', fontSize: '0.75rem', textDecoration: 'none', fontWeight: 500 }}>Sign In →</Link>
       </footer>
 

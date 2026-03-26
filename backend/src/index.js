@@ -80,7 +80,7 @@ app.use((err, req, res, next) => {
 
 const server = createServer(app);
 server.listen(PORT, () => {
-  logger.info(`ResumeFlow API running on port ${PORT}`);
+  logger.info(`Hirie.io API running on port ${PORT}`);
 });
 
 module.exports = app;

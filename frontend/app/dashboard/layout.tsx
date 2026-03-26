@@ -162,14 +162,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Logo row */}
         <div style={{ padding: '0 1.25rem', marginBottom: '2rem', overflow: 'hidden', whiteSpace: 'nowrap' }}>
           <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '1.25rem', flexShrink: 0 }}>🔮</span>
+            <img src="/logo.png" alt="Hirie.io" style={{ width: '28px', height: '28px', objectFit: 'contain', flexShrink: 0 }} />
             <span style={{
               fontSize: '1.125rem', fontWeight: 700, color: 'var(--text-primary)',
               opacity: expanded ? 1 : 0,
               transition: 'opacity 0.2s ease',
               whiteSpace: 'nowrap',
             }}>
-              Resume<span style={{ color: '#6366f1' }}>Flow</span>
+              Hirie<span style={{ color: '#6366f1' }}>.io</span>
             </span>
           </Link>
         </div>
@@ -401,7 +401,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {/* Mobile: brand in topbar */}
           {isMobile && (
             <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', flex: 1 }}>
-              🔮 Resume<span style={{ color: '#6366f1' }}>Flow</span>
+              Hirie<span style={{ color: '#6366f1' }}>.io</span>
             </span>
           )}
 

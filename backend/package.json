@@ -1,7 +1,7 @@
 {
   "name": "resumeflow-backend",
   "version": "1.0.0",
-  "description": "ResumeFlow Backend API + Workers",
+  "description": "Hirie.io Backend API + Workers",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",

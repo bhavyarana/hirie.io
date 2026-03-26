@@ -98,9 +98,9 @@ export default function LoginPage() {
 
         {/* Logo */}
         <Link href="/" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.625rem', marginBottom: '3rem' }}>
-          <span style={{ fontSize: '1.75rem' }}>🔮</span>
+          <img src="/logo.png" alt="Hirie.io" style={{ width: '36px', height: '36px', objectFit: 'contain' }} />
           <span style={{ fontSize: '1.375rem', fontWeight: 800, color: t.textPrimary, letterSpacing: '-0.01em' }}>
-            Resume<span style={{ color: '#6366f1' }}>Flow</span>
+            Hirie<span style={{ color: '#6366f1' }}>.io</span>
           </span>
         </Link>
 
