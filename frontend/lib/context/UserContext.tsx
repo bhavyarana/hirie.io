@@ -2,8 +2,9 @@
 
 import { createContext, useContext, useEffect, ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { usersApi, UserRecord } from '@/lib/api';
+import { usersApi, UserRecord, AuthError, NetworkError } from '@/lib/api';
 import { createClient } from '@/lib/supabase/client';
+import { toast } from 'sonner';
 
 interface UserContextValue {
   user: UserRecord | null;
@@ -40,21 +41,37 @@ export function UserProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, [queryClient]);
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch, error } = useQuery({
     queryKey: ['me'],
     queryFn: () => usersApi.me(),
-    // No staleTime — always fetch fresh auth data. 
-    // gcTime controls how long to keep in memory when unused.
     staleTime: 0,
     gcTime: 0,
-    retry: false,
+    // Let react-query retry on NetworkError, but not on AuthError
+    retry: (failureCount, err) => {
+      if (err instanceof AuthError) return false;   // real auth failure → no retry
+      if (err instanceof NetworkError) return failureCount < 2; // network → retry twice more
+      return false;
+    },
+    retryDelay: (attempt) => 500 * (attempt + 1),
   });
+
+  // Show a non-intrusive toast on network errors so the user knows
+  // something is wrong — without logging them out.
+  useEffect(() => {
+    if (error && error instanceof NetworkError) {
+      toast.warning('Connection issue — some data may be unavailable. Retrying…', {
+        id: 'network-error',   // deduplicate: only show once even if re-triggered
+        duration: 5000,
+      });
+    }
+  }, [error]);
 
   return (
     <UserContext.Provider value={{
       user: data?.user ?? null,
       role: data?.user?.role ?? '',
-      loading: isLoading,
+      // Still show as "loading" during network retries so the UI doesn't flash
+      loading: isLoading || (!!error && error instanceof NetworkError),
       refetch,
     }}>
       {children}

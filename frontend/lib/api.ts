@@ -4,24 +4,97 @@ import { createClient } from '@/lib/supabase/client';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+// ── Error classes ──────────────────────────────────────────────────────────────
+
+/** Thrown when the backend returns 503 / a connectivity issue — NOT an auth failure */
+export class NetworkError extends Error {
+  retryable = true;
+  constructor(message = 'Network unavailable. Please check your connection and try again.') {
+    super(message);
+    this.name = 'NetworkError';
+  }
+}
+
+/** Thrown only on genuine 401 responses (bad/expired token) */
+export class AuthError extends Error {
+  constructor(message = 'Session expired. Please sign in again.') {
+    super(message);
+    this.name = 'AuthError';
+  }
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
 async function getAuthHeaders(): Promise<HeadersInit> {
   const supabase = createClient();
   const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.access_token) throw new Error('Not authenticated');
+  if (!session?.access_token) throw new AuthError('Not authenticated');
   return {
     Authorization: `Bearer ${session.access_token}`,
     'Content-Type': 'application/json',
   };
 }
 
-async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers: { ...headers, ...options?.headers } });
+/**
+ * apiFetch — fetch wrapper with:
+ *   • 401 → throws AuthError (session genuinely invalid → redirect to login)
+ *   • 503 / fetch TypeError → throws NetworkError (retried up to 3×, never logs out)
+ *   • Other non-2xx → throws plain Error with backend message
+ */
+async function apiFetch<T>(path: string, options?: RequestInit, _attempt = 1): Promise<T> {
+  const MAX_RETRIES = 3;
+
+  let headers: HeadersInit;
+  try {
+    headers = await getAuthHeaders();
+  } catch (err) {
+    if (err instanceof AuthError) throw err;
+    // getSession() failed due to a network issue — treat as network error
+    if (_attempt < MAX_RETRIES) {
+      await sleep(400 * _attempt);
+      return apiFetch<T>(path, options, _attempt + 1);
+    }
+    throw new NetworkError();
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: { ...headers, ...options?.headers },
+    });
+  } catch {
+    // fetch() itself threw — pure network error (offline, DNS, timeout)
+    if (_attempt < MAX_RETRIES) {
+      await sleep(400 * _attempt);
+      return apiFetch<T>(path, options, _attempt + 1);
+    }
+    throw new NetworkError();
+  }
+
+  // 401 → real auth failure (expired token, revoked session)
+  if (res.status === 401) {
+    throw new AuthError();
+  }
+
+  // 503 → backend couldn't reach Supabase auth server (network blip)
+  if (res.status === 503) {
+    const body = await res.json().catch(() => ({}));
+    if (body?.retryable && _attempt < MAX_RETRIES) {
+      await sleep(500 * _attempt);
+      return apiFetch<T>(path, options, _attempt + 1);
+    }
+    throw new NetworkError(body?.error || 'Service temporarily unavailable. Please try again.');
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     const msg = err.hint ? `${err.error} — ${err.hint}` : (err.error || 'API error');
     throw new Error(msg);
   }
+
   return res.json();
 }
 

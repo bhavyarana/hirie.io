@@ -155,7 +155,7 @@ export default function EditJobPage() {
           {teams.length > 0 && (
             <div>
               <label style={labelStyle}>Assign to Teams</label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '200px', overflowY: 'auto', background: 'var(--bg-input)', borderRadius: '0.5rem', padding: '0.625rem', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '200px', overflowY: 'auto', background: 'var(--bg-base)', borderRadius: '0.5rem', padding: '0.625rem', border: '1px solid var(--border)' }}>
                 {teams.map(t => (
                   <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', padding: '0.35rem 0.5rem', borderRadius: '0.375rem', background: selectedTeamIds.has(t.id) ? 'rgba(99,102,241,0.12)' : 'transparent' }}>
                     <input type="checkbox" checked={selectedTeamIds.has(t.id)} onChange={() => toggleTeam(t.id)} style={{ accentColor: '#6366f1', width: '15px', height: '15px' }} />
