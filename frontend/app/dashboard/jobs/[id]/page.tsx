@@ -37,9 +37,9 @@ const HIRING_STATUSES: Record<string, { label: string; color: string }> = {
 };
 
 function HiringStatusBadge({ status }: { status: string | null }) {
-  if (!status) return <span style={{ color: '#475569', fontSize: '0.75rem' }}>—</span>;
+  if (!status) return <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>—</span>;
   const hs = HIRING_STATUSES[status];
-  if (!hs) return <span style={{ color: '#475569', fontSize: '0.75rem' }}>{status}</span>;
+  if (!hs) return <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{status}</span>;
   return (
     <span style={{
       padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 600,
@@ -69,7 +69,6 @@ export default function JobDetailPage({ params }: Props) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const queryClient = useQueryClient();
-  // Track which candidate IDs we've already alerted for rejection (survives re-renders)
   const alertedRejections = useRef<Set<string>>(new Set());
 
   const { data: currentUserData } = useQuery({ queryKey: ['me'], queryFn: () => usersApi.me() });
@@ -78,7 +77,6 @@ export default function JobDetailPage({ params }: Props) {
   const { data: candidatesData, isLoading } = useQuery({
     queryKey: ['candidates', jobId],
     queryFn: () => candidatesApi.list(jobId),
-    // Poll every 3s while any candidates are still pending/processing, stop when all done
     refetchInterval: (query) => {
       const candidates = (query.state.data as { candidates: Candidate[] } | undefined)?.candidates ?? [];
       const hasActive = candidates.some(c =>
@@ -105,7 +103,6 @@ export default function JobDetailPage({ params }: Props) {
   const allCandidates: Candidate[] = candidatesData?.candidates ?? [];
   const analytics = analyticsData;
 
-  // Alert once per rejected candidate, delete from DB, then remove from list
   useEffect(() => {
     allCandidates.forEach(async (c) => {
       if (c.processing_status === 'rejected' && !alertedRejections.current.has(c.id)) {
@@ -114,28 +111,23 @@ export default function JobDetailPage({ params }: Props) {
           `⚠️ "${c.resume_file_name}" — Please upload a valid resume file`,
           { duration: 8000, id: `rejected-${c.id}` }
         );
-        // Delete from DB + storage + talent pool, then refresh the list
         try {
           await candidatesApi.delete(c.id);
         } catch {
-          // Non-fatal: row still hidden from UI via filter below
+          // Non-fatal
         }
         queryClient.invalidateQueries({ queryKey: ['candidates', jobId] });
       }
     });
   }, [allCandidates, jobId, queryClient]);
 
-  // Rejected candidates are hidden from the UI
   const candidates = allCandidates.filter(c => c.processing_status !== 'rejected');
 
-  // Determine upload permission:
-  // - admin / manager / tl → always allowed
-  // - recruiter → only if they have an explicit job_recruiter_assignments row
   const currentUser = currentUserData?.user;
   const isRecruiter = currentUser?.role === 'recruiter';
   const isAssignedRecruiter = isRecruiter
     ? jobAssignments.some(a => a.recruiter_id === currentUser?.id)
-    : true; // non-recruiter roles are always allowed
+    : true;
   const canUpload = !isRecruiter || isAssignedRecruiter;
 
   const filtered = candidates.filter(c => {
@@ -145,13 +137,12 @@ export default function JobDetailPage({ params }: Props) {
     return true;
   });
 
-  // Distinct uploaders from the loaded candidates
   const uploaderNames = [...new Set(candidates.map(c => c.recruiter_name).filter(Boolean))] as string[];
   const hasFilters = statusFilter !== 'all' || hiringStatusFilter !== 'all' || uploadedByFilter !== 'all';
 
   const SELECT_STYLE: React.CSSProperties = {
-    background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '0.5rem',
-    padding: '0.4rem 0.65rem', color: '#94a3b8', fontSize: '0.8rem',
+    background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: '0.5rem',
+    padding: '0.4rem 0.65rem', color: 'var(--text-secondary)', fontSize: '0.8rem',
     outline: 'none', cursor: 'pointer', appearance: 'auto',
   };
 
@@ -177,7 +168,6 @@ export default function JobDetailPage({ params }: Props) {
     }
   }, [jobId, queryClient]);
 
-
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { 'application/pdf': ['.pdf'], 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'] },
@@ -194,51 +184,49 @@ export default function JobDetailPage({ params }: Props) {
       {/* Header */}
       <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <Link href="/dashboard/jobs" style={{ color: '#64748b', textDecoration: 'none', fontSize: '0.8rem' }}>← Jobs</Link>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#e2e8f0', marginTop: '0.25rem' }}>
+          <Link href="/dashboard/jobs" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '0.8rem' }}>← Jobs</Link>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.25rem' }}>
             {job?.job_title || '…'}
           </h1>
-          <p style={{ color: '#64748b', fontSize: '0.875rem' }}>{job?.company_name} • {candidates.length} candidates</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>{job?.company_name} • {candidates.length} candidates</p>
         </div>
         <button onClick={handleExport} style={{
           padding: '0.625rem 1.25rem', borderRadius: '0.5rem',
-          background: '#0d1526', border: '1px solid #1e2d4a', color: '#94a3b8',
+          background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
           cursor: 'pointer', fontSize: '0.875rem',
         }}>📥 Export CSV</button>
       </div>
 
       {/* Team & Recruiter info panel */}
       {job?.teams && job.teams.length > 0 && (
-        <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', padding: '1.25rem 1.5rem', marginBottom: '1.5rem', display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
-
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '1.25rem 1.5rem', marginBottom: '1.5rem', display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
           {/* Assigned Teams */}
           <div style={{ flex: 1, minWidth: '180px' }}>
-            <p style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.625rem' }}>Assigned Teams</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.625rem' }}>Assigned Teams</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
               {job.teams.map(t => (
-                <span key={t.id} style={{ padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.78rem', background: 'rgba(99,102,241,0.1)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.25)' }}>
+                <span key={t.id} style={{ padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.78rem', background: 'rgba(99,102,241,0.1)', color: '#6366f1', border: '1px solid rgba(99,102,241,0.25)' }}>
                   🏢 {t.name}
                 </span>
               ))}
             </div>
           </div>
 
-          {/* Divider */}
-          <div style={{ width: '1px', background: '#1e2d4a', flexShrink: 0 }} />
+          <div style={{ width: '1px', background: 'var(--border)', flexShrink: 0 }} />
 
           {/* Assigned Recruiters */}
           <div style={{ flex: 1, minWidth: '200px' }}>
-            <p style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.625rem' }}>Assigned Recruiters</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.625rem' }}>Assigned Recruiters</p>
             {jobAssignments.length === 0 ? (
-              <span style={{ color: '#475569', fontSize: '0.8rem' }}>No recruiter assigned yet</span>
+              <span style={{ color: 'var(--text-faint)', fontSize: '0.8rem' }}>No recruiter assigned yet</span>
             ) : (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                 {jobAssignments.map(a => (
-                  <div key={a.recruiter_id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#0a0f1e', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '0.5rem', padding: '0.375rem 0.75rem' }}>
+                  <div key={a.recruiter_id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--bg-input)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '0.5rem', padding: '0.375rem 0.75rem' }}>
                     <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
                     <div>
-                      <span style={{ color: '#e2e8f0', fontSize: '0.825rem', fontWeight: 500 }}>{a.recruiter?.name || a.recruiter?.email}</span>
-                      {a.recruiter?.name && <span style={{ color: '#475569', fontSize: '0.72rem', display: 'block' }}>{a.recruiter.email}</span>}
+                      <span style={{ color: 'var(--text-primary)', fontSize: '0.825rem', fontWeight: 500 }}>{a.recruiter?.name || a.recruiter?.email}</span>
+                      {a.recruiter?.name && <span style={{ color: 'var(--text-faint)', fontSize: '0.72rem', display: 'block' }}>{a.recruiter.email}</span>}
                     </div>
                   </div>
                 ))}
@@ -261,22 +249,21 @@ export default function JobDetailPage({ params }: Props) {
           { label: '🤝 Soft Skills', value: w.soft_skills, color: '#f59e0b' },
         ];
         return (
-          <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', padding: '1rem 1.5rem', marginBottom: '1.5rem' }}>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '1rem 1.5rem', marginBottom: '1.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-              <p style={{ color: '#64748b', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>🎯 Scoring Criteria{!sc && <span style={{ color: '#475569', fontWeight: 400, marginLeft: '0.5rem' }}>(system defaults)</span>}</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>🎯 Scoring Criteria{!sc && <span style={{ color: 'var(--text-faint)', fontWeight: 400, marginLeft: '0.5rem' }}>(system defaults)</span>}</p>
               <div style={{ display: 'flex', gap: '0.4rem' }}>
                 <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', fontSize: '0.7rem', fontWeight: 700 }}>PASS ≥ {pass}</span>
                 <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '0.7rem', fontWeight: 700 }}>REVIEW ≥ {review}</span>
                 <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', fontSize: '0.7rem', fontWeight: 700 }}>FAIL &lt; {review}</span>
               </div>
             </div>
-            {/* Weightage bar */}
             <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', height: '10px', marginBottom: '0.5rem' }}>
               {segments.map(s => <div key={s.label} style={{ width: `${s.value}%`, background: s.color, transition: 'width 0.3s' }} />)}
             </div>
             <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' as const }}>
               {segments.map(s => (
-                <span key={s.label} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem', color: '#94a3b8' }}>
+                <span key={s.label} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
                   <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: s.color, flexShrink: 0 }} />
                   {s.label} <strong style={{ color: s.color }}>{s.value}%</strong>
                 </span>
@@ -286,56 +273,56 @@ export default function JobDetailPage({ params }: Props) {
         );
       })()}
 
-      {/* Upload Dropzone — hidden for unassigned recruiters */}
+      {/* Upload Dropzone */}
       {!canUpload ? (
         <div style={{
-          border: '2px dashed #1e2d4a',
+          border: '2px dashed var(--border)',
           borderRadius: '1rem', padding: '2rem', textAlign: 'center',
-          background: 'rgba(13,21,38,0.5)', marginBottom: '1.5rem',
+          background: 'var(--bg-card)', marginBottom: '1.5rem',
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem',
         }}>
           <div style={{ fontSize: '2rem' }}>🔒</div>
-          <p style={{ color: '#94a3b8', fontWeight: 600, margin: 0 }}>Upload not available</p>
-          <p style={{ color: '#64748b', fontSize: '0.825rem', margin: 0 }}>
+          <p style={{ color: 'var(--text-secondary)', fontWeight: 600, margin: 0 }}>Upload not available</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.825rem', margin: 0 }}>
             You are not assigned to this job. Contact your Team Lead to get access.
           </p>
         </div>
       ) : (
         <div {...getRootProps()} style={{
-          border: `2px dashed ${isDragActive ? '#6366f1' : '#1e2d4a'}`,
+          border: `2px dashed ${isDragActive ? '#6366f1' : 'var(--border)'}`,
           borderRadius: '1rem', padding: '2rem', textAlign: 'center',
-          background: isDragActive ? 'rgba(99,102,241,0.05)' : 'rgba(13,21,38,0.5)',
+          background: isDragActive ? 'rgba(99,102,241,0.05)' : 'var(--bg-card)',
           cursor: isUploading ? 'not-allowed' : 'pointer',
           transition: 'all 0.2s', marginBottom: '1.5rem',
         }}>
           <input {...getInputProps()} />
           {isUploading ? (
             <div>
-              <p style={{ color: '#a5b4fc', marginBottom: '0.75rem' }}>Uploading… {uploadProgress}%</p>
-              <div style={{ background: '#1e2d4a', borderRadius: '999px', height: '6px', maxWidth: '400px', margin: '0 auto' }}>
+              <p style={{ color: '#6366f1', marginBottom: '0.75rem' }}>Uploading… {uploadProgress}%</p>
+              <div style={{ background: 'var(--border)', borderRadius: '999px', height: '6px', maxWidth: '400px', margin: '0 auto' }}>
                 <div style={{ background: 'linear-gradient(90deg, #6366f1, #8b5cf6)', height: '100%', borderRadius: '999px', width: `${uploadProgress}%`, transition: 'width 0.3s' }} />
               </div>
             </div>
           ) : (
             <>
               <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📄</div>
-              <p style={{ color: '#94a3b8', fontWeight: 500, marginBottom: '0.25rem' }}>
+              <p style={{ color: 'var(--text-secondary)', fontWeight: 500, marginBottom: '0.25rem' }}>
                 {isDragActive ? 'Drop resumes here!' : 'Drag & drop up to 100 resumes'}
               </p>
-              <p style={{ color: '#64748b', fontSize: '0.8rem' }}>PDF, DOCX supported • Max 20MB each</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>PDF, DOCX supported • Max 20MB each</p>
             </>
           )}
         </div>
       )}
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '0.25rem', background: '#0a0f1e', padding: '0.25rem', borderRadius: '0.625rem', width: 'fit-content', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', gap: '0.25rem', background: 'var(--bg-input)', padding: '0.25rem', borderRadius: '0.625rem', width: 'fit-content', marginBottom: '1.5rem' }}>
         {(['candidates', 'analytics'] as const).map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)} style={{
             padding: '0.5rem 1.25rem', borderRadius: '0.5rem', cursor: 'pointer',
             fontSize: '0.875rem', fontWeight: 500, transition: 'all 0.2s',
             background: activeTab === tab ? '#6366f1' : 'transparent',
-            color: activeTab === tab ? '#fff' : '#64748b',
+            color: activeTab === tab ? '#fff' : 'var(--text-muted)',
             border: 'none',
           }}>
             {tab === 'candidates' ? `👥 Candidates (${candidates.length})` : '📊 Analytics'}
@@ -346,16 +333,14 @@ export default function JobDetailPage({ params }: Props) {
       {/* Candidates Tab */}
       {activeTab === 'candidates' && (
         <div>
-          {/* ── Filter Bar ── */}
+          {/* Filter Bar */}
           <div style={{
-            background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '0.875rem',
+            background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '0.875rem',
             padding: '0.875rem 1.25rem', marginBottom: '1rem',
             display: 'flex', flexWrap: 'wrap', gap: '0.875rem', alignItems: 'flex-end',
           }}>
-
-            {/* Score Status */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-              <label style={{ color: '#64748b', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Score</label>
+              <label style={{ color: 'var(--text-muted)', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Score</label>
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={SELECT_STYLE}>
                 <option value="all">All Scores</option>
                 <option value="pass">✅ Pass</option>
@@ -366,9 +351,8 @@ export default function JobDetailPage({ params }: Props) {
               </select>
             </div>
 
-            {/* Hiring Status */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-              <label style={{ color: '#64748b', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Hiring Status</label>
+              <label style={{ color: 'var(--text-muted)', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Hiring Status</label>
               <select value={hiringStatusFilter} onChange={e => setHiringStatusFilter(e.target.value)} style={SELECT_STYLE}>
                 <option value="all">All Statuses</option>
                 {Object.entries(HIRING_STATUSES).map(([val, { label }]) => (
@@ -377,10 +361,9 @@ export default function JobDetailPage({ params }: Props) {
               </select>
             </div>
 
-            {/* Uploaded By */}
             {uploaderNames.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                <label style={{ color: '#64748b', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Uploaded By</label>
+                <label style={{ color: 'var(--text-muted)', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Uploaded By</label>
                 <select value={uploadedByFilter} onChange={e => setUploadedByFilter(e.target.value)} style={{ ...SELECT_STYLE, maxWidth: '180px' }}>
                   <option value="all">All Recruiters</option>
                   {uploaderNames.map(name => (
@@ -390,9 +373,8 @@ export default function JobDetailPage({ params }: Props) {
               </div>
             )}
 
-            {/* Results count + clear */}
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'flex-end', gap: '0.5rem' }}>
-              <span style={{ color: '#475569', fontSize: '0.78rem', paddingBottom: '0.35rem' }}>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', paddingBottom: '0.35rem' }}>
                 {filtered.length} of {candidates.length}
               </span>
               {hasFilters && (
@@ -412,44 +394,41 @@ export default function JobDetailPage({ params }: Props) {
           </div>
 
           {/* Table */}
-          <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', overflow: 'hidden' }}>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', overflow: 'hidden' }}>
             {isLoading ? (
-              <div style={{ padding: '3rem', textAlign: 'center', color: '#64748b' }}>Loading candidates…</div>
+              <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading candidates…</div>
             ) : filtered.length === 0 ? (
               <div style={{ padding: '3rem', textAlign: 'center' }}>
                 <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>📭</div>
-                <p style={{ color: '#94a3b8' }}>No candidates {statusFilter !== 'all' ? `with status "${statusFilter}"` : 'yet'}</p>
-                <p style={{ color: '#64748b', fontSize: '0.8rem', marginTop: '0.25rem' }}>Upload resumes above to start screening</p>
+                <p style={{ color: 'var(--text-secondary)' }}>No candidates {statusFilter !== 'all' ? `with status "${statusFilter}"` : 'yet'}</p>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.25rem' }}>Upload resumes above to start screening</p>
               </div>
             ) : (
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr style={{ background: 'rgba(30,45,74,0.3)' }}>
+                    <tr style={{ background: 'var(--table-header-bg)' }}>
                       {['Name / Contact', 'Score', 'Status', 'Hiring Status', 'Recruiter', 'Processing', 'Action'].map(h => (
-                        <th key={h} style={{ padding: '0.75rem 1.25rem', textAlign: 'left', color: '#64748b', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
+                        <th key={h} style={{ padding: '0.75rem 1.25rem', textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {filtered.map(c => (
-                      <tr key={c.id} style={{ borderTop: '1px solid #1e2d4a', transition: 'background 0.15s' }}
-                        onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(99,102,241,0.04)'}
+                      <tr key={c.id} style={{ borderTop: '1px solid var(--border)', transition: 'background 0.15s' }}
+                        onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = 'var(--table-row-hover)'}
                         onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'}>
-                        {/* <td style={{ padding: '1rem 1.25rem' }}>
-                          <p style={{ color: '#94a3b8', fontWeight: 500, fontSize: '0.8rem' }}>{c.resume_file_name}</p>
-                        </td> */}
                         <td style={{ padding: '1rem 1.25rem', minWidth: '180px' }}>
                           {c.name ? (
                             <>
-                              <p style={{ color: '#e2e8f0', fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.2rem' }}>{c.name}</p>
-                              {c.email && <p style={{ color: '#94a3b8', fontSize: '0.75rem' }}>✉️ {c.email}</p>}
-                              {c.phone && <p style={{ color: '#64748b', fontSize: '0.72rem' }}>📞 {c.phone}</p>}
+                              <p style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.2rem' }}>{c.name}</p>
+                              {c.email && <p style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>✉️ {c.email}</p>}
+                              {c.phone && <p style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>📞 {c.phone}</p>}
                             </>
                           ) : c.processing_status === 'pending' || c.processing_status === 'processing' ? (
                             <span style={{ color: '#6366f1', fontSize: '0.75rem' }}>⟳ Extracting…</span>
                           ) : (
-                            <span style={{ color: '#475569', fontSize: '0.75rem' }}>— (re-upload to extract)</span>
+                            <span style={{ color: 'var(--text-faint)', fontSize: '0.75rem' }}>— (re-upload to extract)</span>
                           )}
                         </td>
                         <td style={{ padding: '1rem 1.25rem' }}>
@@ -459,21 +438,21 @@ export default function JobDetailPage({ params }: Props) {
                                 fontSize: '1.125rem', fontWeight: 700,
                                 color: c.score >= 70 ? '#22c55e' : c.score >= 50 ? '#f59e0b' : '#ef4444',
                               }}>{Math.round(c.score)}</span>
-                              <span style={{ color: '#64748b', fontSize: '0.75rem' }}>/100</span>
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>/100</span>
                             </div>
-                          ) : <span style={{ color: '#475569', fontSize: '0.8rem' }}>—</span>}
+                          ) : <span style={{ color: 'var(--text-faint)', fontSize: '0.8rem' }}>—</span>}
                         </td>
                         <td style={{ padding: '1rem 1.25rem' }}>
-                          {c.score_status ? <StatusBadge status={c.score_status} /> : <span style={{ color: '#475569', fontSize: '0.75rem' }}>—</span>}
+                          {c.score_status ? <StatusBadge status={c.score_status} /> : <span style={{ color: 'var(--text-faint)', fontSize: '0.75rem' }}>—</span>}
                         </td>
                         <td style={{ padding: '1rem 1.25rem' }}>
                           <HiringStatusBadge status={c.hiring_status} />
                         </td>
                         <td style={{ padding: '1rem 1.25rem', minWidth: '120px' }}>
                           {c.recruiter_name ? (
-                            <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>👤 {c.recruiter_name}</span>
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>👤 {c.recruiter_name}</span>
                           ) : (
-                            <span style={{ color: '#475569', fontSize: '0.75rem' }}>—</span>
+                            <span style={{ color: 'var(--text-faint)', fontSize: '0.75rem' }}>—</span>
                           )}
                         </td>
                         <td style={{ padding: '1rem 1.25rem' }}>
@@ -523,8 +502,8 @@ export default function JobDetailPage({ params }: Props) {
               { label: 'Fail', value: analytics.fail_count, color: '#ef4444' },
               { label: 'Avg Score', value: analytics.average_score, color: '#a78bfa' },
             ].map(s => (
-              <div key={s.label} style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '0.75rem', padding: '1rem', textAlign: 'center' }}>
-                <p style={{ color: '#64748b', fontSize: '0.75rem', marginBottom: '0.25rem' }}>{s.label}</p>
+              <div key={s.label} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', textAlign: 'center' }}>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: '0.25rem' }}>{s.label}</p>
                 <p style={{ fontSize: '1.75rem', fontWeight: 700, color: s.color }}>{s.value}</p>
               </div>
             ))}
@@ -532,13 +511,13 @@ export default function JobDetailPage({ params }: Props) {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
             {/* Score Distribution */}
-            <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', padding: '1.5rem' }}>
-              <h3 style={{ color: '#e2e8f0', fontWeight: 600, marginBottom: '1.25rem', fontSize: '0.9rem' }}>Score Distribution</h3>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '1.5rem' }}>
+              <h3 style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: '1.25rem', fontSize: '0.9rem' }}>Score Distribution</h3>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={analytics.score_distribution} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="range" tick={{ fontSize: 10, fill: '#64748b' }} />
-                  <YAxis tick={{ fontSize: 10, fill: '#64748b' }} />
-                  <Tooltip contentStyle={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '0.5rem', color: '#e2e8f0' }} />
+                  <XAxis dataKey="range" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
+                  <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
+                  <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '0.5rem', color: 'var(--text-primary)' }} />
                   <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                     {analytics.score_distribution.map((entry, i) => {
                       const midpoint = parseInt(entry.range.split('-')[0]) + 5;
@@ -550,20 +529,20 @@ export default function JobDetailPage({ params }: Props) {
             </div>
 
             {/* Top Missing Skills */}
-            <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', padding: '1.5rem' }}>
-              <h3 style={{ color: '#e2e8f0', fontWeight: 600, marginBottom: '1.25rem', fontSize: '0.9rem' }}>Top Missing Skills</h3>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '1.5rem' }}>
+              <h3 style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: '1.25rem', fontSize: '0.9rem' }}>Top Missing Skills</h3>
               {analytics.top_missing_skills.length === 0 ? (
-                <p style={{ color: '#64748b', fontSize: '0.875rem' }}>No data yet</p>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No data yet</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                   {analytics.top_missing_skills.slice(0, 7).map(s => (
                     <div key={s.skill} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                          <span style={{ color: '#e2e8f0', fontSize: '0.8rem' }}>{s.skill}</span>
-                          <span style={{ color: '#64748b', fontSize: '0.75rem' }}>{s.count}</span>
+                          <span style={{ color: 'var(--text-primary)', fontSize: '0.8rem' }}>{s.skill}</span>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{s.count}</span>
                         </div>
-                        <div style={{ background: '#1e2d4a', borderRadius: '999px', height: '4px' }}>
+                        <div style={{ background: 'var(--border)', borderRadius: '999px', height: '4px' }}>
                           <div style={{
                             background: '#ef4444', height: '100%', borderRadius: '999px',
                             width: `${(s.count / (analytics.top_missing_skills[0]?.count || 1)) * 100}%`,
@@ -577,18 +556,18 @@ export default function JobDetailPage({ params }: Props) {
             </div>
           </div>
 
-          {/* Top Matched Skills */}
-          <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', padding: '1.5rem' }}>
-            <h3 style={{ color: '#e2e8f0', fontWeight: 600, marginBottom: '1.25rem', fontSize: '0.9rem' }}>Common Strengths Across Candidates</h3>
+          {/* Common Strengths */}
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '1.5rem' }}>
+            <h3 style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: '1.25rem', fontSize: '0.9rem' }}>Common Strengths Across Candidates</h3>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
               {analytics.top_strengths.slice(0, 12).map(s => (
                 <span key={s.skill} style={{
                   padding: '0.375rem 0.875rem', borderRadius: '999px', fontSize: '0.8rem',
                   background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)',
-                  color: '#a5b4fc',
+                  color: '#6366f1',
                 }}>{s.skill} ({s.count})</span>
               ))}
-              {analytics.top_strengths.length === 0 && <p style={{ color: '#64748b', fontSize: '0.875rem' }}>No data yet</p>}
+              {analytics.top_strengths.length === 0 && <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>No data yet</p>}
             </div>
           </div>
         </div>
