@@ -32,27 +32,18 @@ export default function EditJobPage() {
   const [scoring, setScoring] = useState<ScoringCriteria>(DEFAULT_SCORING);
   const [loaded, setLoaded] = useState(false);
 
-  // Redirect if not admin or manager
   useEffect(() => {
-    if (role && role !== 'admin' && role !== 'manager') {
-      router.replace('/dashboard/jobs');
-    }
+    if (role && role !== 'admin' && role !== 'manager') router.replace('/dashboard/jobs');
   }, [role, router]);
 
-  // Load existing job data
   const { data: jobData, isLoading: jobLoading } = useQuery({
     queryKey: ['job', jobId],
     queryFn: () => jobsApi.get(jobId),
     enabled: !!jobId,
   });
 
-  // Load teams for selector
-  const { data: teamsData } = useQuery({
-    queryKey: ['teams'],
-    queryFn: () => teamsApi.list(),
-  });
+  const { data: teamsData } = useQuery({ queryKey: ['teams'], queryFn: () => teamsApi.list() });
 
-  // Populate form once job data arrives
   useEffect(() => {
     if (jobData?.job && !loaded) {
       const j = jobData.job;
@@ -61,14 +52,9 @@ export default function EditJobPage() {
       setDescription(j.job_description_text ?? '');
       setSkillsInput((j.required_skills ?? []).join(', '));
       setStatus(j.status as 'active' | 'closed' | 'draft');
-      // Pre-check teams from the many-to-many assignment
       const teamIds = (j.teams ?? []).map((t: { id: string }) => t.id);
-      if (teamIds.length > 0) {
-        setSelectedTeamIds(new Set(teamIds));
-      } else if (j.assigned_team_id) {
-        setSelectedTeamIds(new Set([j.assigned_team_id]));
-      }
-      // Pre-populate scoring criteria (fall back to defaults if not set)
+      if (teamIds.length > 0) setSelectedTeamIds(new Set(teamIds));
+      else if (j.assigned_team_id) setSelectedTeamIds(new Set([j.assigned_team_id]));
       if (j.scoring_criteria) {
         setScoring({
           pass_threshold: j.scoring_criteria.pass_threshold ?? 70,
@@ -88,7 +74,6 @@ export default function EditJobPage() {
   const updateMutation = useMutation({
     mutationFn: async (data: Partial<CreateJobData> & { status?: string }) => {
       await jobsApi.update(jobId, data as Partial<CreateJobData>);
-      // Update many-to-many team assignments
       await jobsApi.setTeams(jobId, Array.from(selectedTeamIds));
     },
     onSuccess: () => {
@@ -101,106 +86,59 @@ export default function EditJobPage() {
   });
 
   function toggleTeam(id: string) {
-    setSelectedTeamIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
+    setSelectedTeamIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   }
 
   const weightsTotal = Object.values(scoring.weights).reduce((a, b) => a + b, 0);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!jobTitle.trim() || !companyName.trim() || !description.trim()) {
-      toast.error('Job title, company name, and description are required');
-      return;
-    }
-    if (weightsTotal !== 100) {
-      toast.error(`Dimension weights must total 100% (currently ${weightsTotal}%)`);
-      return;
-    }
+    if (!jobTitle.trim() || !companyName.trim() || !description.trim()) { toast.error('Job title, company name, and description are required'); return; }
+    if (weightsTotal !== 100) { toast.error(`Dimension weights must total 100% (currently ${weightsTotal}%)`); return; }
     const skills = skillsInput.split(',').map(s => s.trim()).filter(Boolean);
     const firstTeam = selectedTeamIds.size > 0 ? Array.from(selectedTeamIds)[0] : null;
-    updateMutation.mutate({
-      job_title: jobTitle.trim(),
-      company_name: companyName.trim(),
-      job_description_text: description.trim(),
-      required_skills: skills,
-      assigned_team_id: firstTeam,
-      status,
-      scoring_criteria: scoring,
-    } as Partial<CreateJobData>);
+    updateMutation.mutate({ job_title: jobTitle.trim(), company_name: companyName.trim(), job_description_text: description.trim(), required_skills: skills, assigned_team_id: firstTeam, status, scoring_criteria: scoring } as Partial<CreateJobData>);
   };
 
   const teams = teamsData?.teams ?? [];
 
-  const labelStyle = { color: '#94a3b8', fontSize: '0.8rem', display: 'block', marginBottom: '0.4rem' } as const;
+  const labelStyle = { color: 'var(--text-secondary)', fontSize: '0.8rem', display: 'block', marginBottom: '0.4rem' } as const;
   const inputStyle = {
-    width: '100%',
-    background: '#111827',
-    border: '1px solid #1e2d4a',
-    borderRadius: '0.5rem',
-    padding: '0.625rem 0.75rem',
-    color: '#e2e8f0',
-    fontSize: '0.875rem',
-    boxSizing: 'border-box' as const,
+    width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border)',
+    borderRadius: '0.5rem', padding: '0.625rem 0.75rem',
+    color: 'var(--text-primary)', fontSize: '0.875rem', boxSizing: 'border-box' as const,
   };
 
-  if (jobLoading) {
-    return (
-      <div style={{ padding: '2rem', maxWidth: '720px', color: '#64748b' }}>Loading job…</div>
-    );
-  }
-
-  if (!jobData?.job) {
-    return (
-      <div style={{ padding: '2rem', maxWidth: '720px', color: '#ef4444' }}>Job not found.</div>
-    );
-  }
+  if (jobLoading) return <div style={{ padding: '2rem', maxWidth: '720px', color: 'var(--text-muted)' }}>Loading job…</div>;
+  if (!jobData?.job) return <div style={{ padding: '2rem', maxWidth: '720px', color: '#ef4444' }}>Job not found.</div>;
 
   return (
     <div style={{ padding: '2rem', maxWidth: '720px' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem' }}>
-        <Link
-          href={`/dashboard/jobs/${jobId}`}
-          style={{ color: '#64748b', textDecoration: 'none', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-        >
+        <Link href={`/dashboard/jobs/${jobId}`} style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
           ← Back
         </Link>
-        <span style={{ color: '#334155' }}>|</span>
+        <span style={{ color: 'var(--border)' }}>|</span>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#e2e8f0' }}>Edit Job</h1>
-          <p style={{ color: '#64748b', fontSize: '0.8rem', marginTop: '0.15rem' }}>Update the job details below</p>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>Edit Job</h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.15rem' }}>Update the job details below</p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit}>
-        <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', marginBottom: '1.5rem' }}>
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', marginBottom: '1.5rem' }}>
 
           {/* Job Title */}
           <div>
             <label style={labelStyle}>Job Title *</label>
-            <input
-              value={jobTitle}
-              onChange={e => setJobTitle(e.target.value)}
-              placeholder="e.g. Senior React Developer"
-              style={inputStyle}
-              required
-            />
+            <input value={jobTitle} onChange={e => setJobTitle(e.target.value)} placeholder="e.g. Senior React Developer" style={inputStyle} required />
           </div>
 
           {/* Company Name */}
           <div>
             <label style={labelStyle}>Company Name *</label>
-            <input
-              value={companyName}
-              onChange={e => setCompanyName(e.target.value)}
-              placeholder="e.g. Acme Corp"
-              style={inputStyle}
-              required
-            />
+            <input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="e.g. Acme Corp" style={inputStyle} required />
           </div>
 
           {/* Status */}
@@ -213,24 +151,18 @@ export default function EditJobPage() {
             </select>
           </div>
 
-          {/* Assign to Teams — multi-select checkboxes */}
+          {/* Assign to Teams */}
           {teams.length > 0 && (
             <div>
               <label style={labelStyle}>Assign to Teams</label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '200px', overflowY: 'auto', background: '#0a0f1e', borderRadius: '0.5rem', padding: '0.625rem', border: '1px solid #1e2d4a' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '200px', overflowY: 'auto', background: 'var(--bg-input)', borderRadius: '0.5rem', padding: '0.625rem', border: '1px solid var(--border)' }}>
                 {teams.map(t => (
                   <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', padding: '0.35rem 0.5rem', borderRadius: '0.375rem', background: selectedTeamIds.has(t.id) ? 'rgba(99,102,241,0.12)' : 'transparent' }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedTeamIds.has(t.id)}
-                      onChange={() => toggleTeam(t.id)}
-                      style={{ accentColor: '#6366f1', width: '15px', height: '15px' }}
-                    />
-                    <span style={{ color: '#e2e8f0', fontSize: '0.85rem' }}>{t.name}</span>
+                    <input type="checkbox" checked={selectedTeamIds.has(t.id)} onChange={() => toggleTeam(t.id)} style={{ accentColor: '#6366f1', width: '15px', height: '15px' }} />
+                    <span style={{ color: 'var(--text-primary)', fontSize: '0.85rem' }}>{t.name}</span>
                   </label>
                 ))}
               </div>
-              {/* Selected team tags */}
               {selectedTeamIds.size > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', marginTop: '0.5rem' }}>
                   {teams.filter(t => selectedTeamIds.has(t.id)).map(t => (
@@ -246,13 +178,8 @@ export default function EditJobPage() {
 
           {/* Required Skills */}
           <div>
-            <label style={labelStyle}>Required Skills <span style={{ color: '#475569' }}>(comma-separated)</span></label>
-            <input
-              value={skillsInput}
-              onChange={e => setSkillsInput(e.target.value)}
-              placeholder={SKILLS_PLACEHOLDER}
-              style={inputStyle}
-            />
+            <label style={labelStyle}>Required Skills <span style={{ color: 'var(--text-faint)' }}>(comma-separated)</span></label>
+            <input value={skillsInput} onChange={e => setSkillsInput(e.target.value)} placeholder={SKILLS_PLACEHOLDER} style={inputStyle} />
             {skillsInput && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.5rem' }}>
                 {skillsInput.split(',').map(s => s.trim()).filter(Boolean).map(s => (
@@ -265,51 +192,37 @@ export default function EditJobPage() {
           {/* Job Description */}
           <div>
             <label style={labelStyle}>Job Description *</label>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              rows={10}
-              placeholder="Describe the role, responsibilities, requirements…"
-              style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }}
-              required
-            />
+            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={10} placeholder="Describe the role, responsibilities, requirements…" style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }} required />
           </div>
         </div>
 
-        {/* ── Scoring Criteria ─────────────────────────────────────── */}
-        <div style={{
-          background: '#0d1526', border: '1px solid rgba(99,102,241,0.25)',
-          borderRadius: '1rem', padding: '1.75rem', marginBottom: '1.5rem',
-          position: 'relative', overflow: 'hidden',
-        }}>
+        {/* Scoring Criteria */}
+        <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: '1rem', padding: '1.75rem', marginBottom: '1.5rem', position: 'relative', overflow: 'hidden' }}>
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2px', background: 'linear-gradient(90deg, #6366f1, #8b5cf6)' }} />
-          <h2 style={{ color: '#e2e8f0', fontWeight: 600, marginBottom: '0.25rem', fontSize: '1rem' }}>🎯 Scoring Criteria</h2>
-          <p style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '1.5rem' }}>
+          <h2 style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: '0.25rem', fontSize: '1rem' }}>🎯 Scoring Criteria</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.5rem' }}>
             These settings control how AI scores future resume uploads for this job.
           </p>
 
           {/* Thresholds */}
           <div style={{ marginBottom: '1.5rem' }}>
-            <p style={{ color: '#94a3b8', fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Pass / Review / Fail Thresholds
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '0.75rem' }}>
               <div>
-                <label style={{ color: '#94a3b8', fontSize: '0.78rem', display: 'block', marginBottom: '0.4rem' }}>Pass Threshold (score ≥)</label>
-                <input type="number" min={1} max={100}
-                  value={scoring.pass_threshold}
+                <label style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', display: 'block', marginBottom: '0.4rem' }}>Pass Threshold (score ≥)</label>
+                <input type="number" min={1} max={100} value={scoring.pass_threshold}
                   onChange={e => setScoring(s => ({ ...s, pass_threshold: Math.max(1, Math.min(100, +e.target.value)) }))}
-                  style={{ width: '100%', padding: '0.6rem 0.875rem', borderRadius: '0.5rem', background: '#0a0f1e', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box' as const }} />
+                  style={{ width: '100%', padding: '0.6rem 0.875rem', borderRadius: '0.5rem', background: 'var(--bg-input)', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box' as const }} />
               </div>
               <div>
-                <label style={{ color: '#94a3b8', fontSize: '0.78rem', display: 'block', marginBottom: '0.4rem' }}>Review Threshold (score ≥)</label>
-                <input type="number" min={1} max={99}
-                  value={scoring.review_threshold}
+                <label style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', display: 'block', marginBottom: '0.4rem' }}>Review Threshold (score ≥)</label>
+                <input type="number" min={1} max={99} value={scoring.review_threshold}
                   onChange={e => setScoring(s => ({ ...s, review_threshold: Math.max(1, Math.min(99, +e.target.value)) }))}
-                  style={{ width: '100%', padding: '0.6rem 0.875rem', borderRadius: '0.5rem', background: '#0a0f1e', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box' as const }} />
+                  style={{ width: '100%', padding: '0.6rem 0.875rem', borderRadius: '0.5rem', background: 'var(--bg-input)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '0.9rem', fontWeight: 700, boxSizing: 'border-box' as const }} />
               </div>
             </div>
-            {/* Live preview badges */}
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' as const }}>
               <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', fontSize: '0.72rem', fontWeight: 700 }}>✅ PASS ≥ {scoring.pass_threshold}</span>
               <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '0.72rem', fontWeight: 700 }}>🔶 REVIEW ≥ {scoring.review_threshold}</span>
@@ -320,12 +233,13 @@ export default function EditJobPage() {
           {/* Weightages */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <p style={{ color: '#94a3b8', fontSize: '0.78rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Dimension Weightages</p>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Dimension Weightages</p>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <span style={{ fontSize: '0.78rem', fontWeight: 700, color: weightsTotal === 100 ? '#22c55e' : '#ef4444' }}>
                   Total: {weightsTotal}% {weightsTotal === 100 ? '✓' : '(must = 100%)'}
                 </span>
-                <button type="button" onClick={() => setScoring(s => ({ ...s, weights: { technical_skills: 35, experience: 30, education: 20, soft_skills: 15 } }))} style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem', borderRadius: '0.3rem', background: 'rgba(100,116,139,0.1)', border: '1px solid rgba(100,116,139,0.25)', color: '#64748b', cursor: 'pointer' }}>↺ Reset</button>
+                <button type="button" onClick={() => setScoring(s => ({ ...s, weights: { technical_skills: 35, experience: 30, education: 20, soft_skills: 15 } }))}
+                  style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem', borderRadius: '0.3rem', background: 'rgba(100,116,139,0.1)', border: '1px solid rgba(100,116,139,0.25)', color: 'var(--text-muted)', cursor: 'pointer' }}>↺ Reset</button>
               </div>
             </div>
             {([
@@ -336,11 +250,10 @@ export default function EditJobPage() {
             ] as const).map(({ key, label, color }) => (
               <div key={key} style={{ marginBottom: '0.875rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
-                  <label style={{ color: '#94a3b8', fontSize: '0.8rem' }}>{label}</label>
+                  <label style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{label}</label>
                   <span style={{ color, fontWeight: 700, fontSize: '0.85rem', minWidth: '3rem', textAlign: 'right' as const }}>{scoring.weights[key]}%</span>
                 </div>
-                <input type="range" min={0} max={100}
-                  value={scoring.weights[key]}
+                <input type="range" min={0} max={100} value={scoring.weights[key]}
                   onChange={e => setScoring(s => ({ ...s, weights: { ...s.weights, [key]: +e.target.value } }))}
                   style={{ width: '100%', accentColor: color }} />
               </div>
@@ -350,24 +263,18 @@ export default function EditJobPage() {
 
         {/* Actions */}
         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-          <Link
-            href={`/dashboard/jobs/${jobId}`}
-            style={{ padding: '0.75rem 1.5rem', borderRadius: '0.625rem', border: '1px solid #1e2d4a', color: '#94a3b8', textDecoration: 'none', fontSize: '0.875rem', display: 'inline-block' }}
-          >
+          <Link href={`/dashboard/jobs/${jobId}`}
+            style={{ padding: '0.75rem 1.5rem', borderRadius: '0.625rem', border: '1px solid var(--border)', color: 'var(--text-secondary)', textDecoration: 'none', fontSize: '0.875rem', display: 'inline-block' }}>
             Cancel
           </Link>
-          <button
-            type="submit"
-            disabled={updateMutation.isPending || weightsTotal !== 100}
+          <button type="submit" disabled={updateMutation.isPending || weightsTotal !== 100}
             style={{
               padding: '0.75rem 2rem', borderRadius: '0.625rem',
-              background: weightsTotal !== 100 ? '#1e2d4a' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-              color: weightsTotal !== 100 ? '#64748b' : '#fff',
+              background: weightsTotal !== 100 ? 'var(--border)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              color: weightsTotal !== 100 ? 'var(--text-muted)' : '#fff',
               border: 'none', cursor: (updateMutation.isPending || weightsTotal !== 100) ? 'not-allowed' : 'pointer',
-              fontSize: '0.875rem', fontWeight: 600,
-              opacity: updateMutation.isPending ? 0.7 : 1,
-            }}
-          >
+              fontSize: '0.875rem', fontWeight: 600, opacity: updateMutation.isPending ? 0.7 : 1,
+            }}>
             {updateMutation.isPending ? 'Saving…' : 'Save Changes'}
           </button>
         </div>

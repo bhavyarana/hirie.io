@@ -9,8 +9,15 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
 const ROLE_COLORS: Record<string, string> = { admin: '#f59e0b', manager: '#6366f1', tl: '#22c55e', recruiter: '#38bdf8' };
-const INP: React.CSSProperties = { width: '100%', background: '#111827', border: '1px solid #1e2d4a', borderRadius: '0.5rem', padding: '0.625rem 0.75rem', color: '#e2e8f0', fontSize: '0.875rem', boxSizing: 'border-box' };
-const LBL: React.CSSProperties = { color: '#94a3b8', fontSize: '0.8rem', display: 'block', marginBottom: '0.4rem' };
+
+const INP: React.CSSProperties = {
+  width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border)',
+  borderRadius: '0.5rem', padding: '0.625rem 0.75rem',
+  color: 'var(--text-primary)', fontSize: '0.875rem', boxSizing: 'border-box',
+};
+const LBL: React.CSSProperties = {
+  color: 'var(--text-secondary)', fontSize: '0.8rem', display: 'block', marginBottom: '0.4rem',
+};
 
 // ─── Add Member Modal ─────────────────────────────────────────────────────────
 function AddMemberModal({ teamId, existingIds, onClose, users }: { teamId: string; existingIds: string[]; onClose: () => void; users: UserRecord[] }) {
@@ -27,8 +34,8 @@ function AddMemberModal({ teamId, existingIds, onClose, users }: { teamId: strin
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', padding: '2rem', width: '400px', maxWidth: '95vw' }}>
-        <h2 style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: '1.5rem' }}>Add Team Member</h2>
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '2rem', width: '400px', maxWidth: '95vw' }}>
+        <h2 style={{ color: 'var(--text-primary)', fontWeight: 700, marginBottom: '1.5rem' }}>Add Team Member</h2>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
             <label style={LBL}>User *</label>
@@ -46,7 +53,7 @@ function AddMemberModal({ teamId, existingIds, onClose, users }: { teamId: strin
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem', justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '0.625rem 1.25rem', borderRadius: '0.5rem', border: '1px solid #1e2d4a', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: '0.875rem' }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '0.625rem 1.25rem', borderRadius: '0.5rem', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.875rem' }}>Cancel</button>
           <button onClick={() => mutation.mutate()} disabled={!userId || mutation.isPending}
             style={{ padding: '0.625rem 1.5rem', borderRadius: '0.5rem', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600, border: 'none', opacity: !userId ? 0.6 : 1 }}>
             {mutation.isPending ? 'Adding…' : 'Add Member'}
@@ -57,7 +64,7 @@ function AddMemberModal({ teamId, existingIds, onClose, users }: { teamId: strin
   );
 }
 
-// ─── Edit Team Modal (Admin only) ─────────────────────────────────────────────
+// ─── Edit Team Modal ──────────────────────────────────────────────────────────
 function EditTeamModal({ teamId, currentName, currentManagerId, currentTlId, onClose, users }: {
   teamId: string; currentName: string; currentManagerId: string | null; currentTlId: string | null;
   onClose: () => void; users: UserRecord[];
@@ -83,8 +90,8 @@ function EditTeamModal({ teamId, currentName, currentManagerId, currentTlId, onC
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', padding: '2rem', width: '440px', maxWidth: '95vw' }}>
-        <h2 style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: '1.5rem' }}>Edit Team</h2>
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '2rem', width: '440px', maxWidth: '95vw' }}>
+        <h2 style={{ color: 'var(--text-primary)', fontWeight: 700, marginBottom: '1.5rem' }}>Edit Team</h2>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
             <label style={LBL}>Team Name *</label>
@@ -106,7 +113,7 @@ function EditTeamModal({ teamId, currentName, currentManagerId, currentTlId, onC
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem', justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '0.625rem 1.25rem', borderRadius: '0.5rem', border: '1px solid #1e2d4a', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: '0.875rem' }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '0.625rem 1.25rem', borderRadius: '0.5rem', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.875rem' }}>Cancel</button>
           <button onClick={() => mutation.mutate()} disabled={!name.trim() || mutation.isPending}
             style={{ padding: '0.625rem 1.5rem', borderRadius: '0.5rem', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600, border: 'none', opacity: !name.trim() ? 0.6 : 1 }}>
             {mutation.isPending ? 'Saving…' : 'Save Changes'}
@@ -123,10 +130,7 @@ function AssignJobsModal({ teamId, currentJobIds, onClose }: { teamId: string; c
   const [saving, setSaving] = useState(false);
   const queryClient = useQueryClient();
 
-  const { data: jobsData, isLoading } = useQuery({
-    queryKey: ['jobs'],
-    queryFn: () => jobsApi.list(),
-  });
+  const { data: jobsData, isLoading } = useQuery({ queryKey: ['jobs'], queryFn: () => jobsApi.list() });
   const activeJobs = (jobsData?.jobs ?? []).filter(j => j.status === 'active');
 
   function toggle(id: string) {
@@ -136,14 +140,10 @@ function AssignJobsModal({ teamId, currentJobIds, onClose }: { teamId: string; c
   async function handleSave() {
     setSaving(true);
     try {
-      // Jobs to add: in selected but not in current
       const toAdd = [...selected].filter(id => !currentJobIds.includes(id));
-      // Jobs to remove: in current but not in selected
       const toRemove = currentJobIds.filter(id => !selected.has(id));
-
       if (toAdd.length > 0) await teamsApi.assignJobs(teamId, toAdd);
       for (const jobId of toRemove) await teamsApi.removeJob(teamId, jobId);
-
       toast.success('Team jobs updated!');
       queryClient.invalidateQueries({ queryKey: ['team', teamId] });
       onClose();
@@ -156,23 +156,23 @@ function AssignJobsModal({ teamId, currentJobIds, onClose }: { teamId: string; c
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', padding: '2rem', width: '520px', maxWidth: '95vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
-        <h2 style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: '0.5rem' }}>Assign Jobs to Team</h2>
-        <p style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '1.25rem' }}>Check the active jobs you want this team to work on.</p>
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '2rem', width: '520px', maxWidth: '95vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+        <h2 style={{ color: 'var(--text-primary)', fontWeight: 700, marginBottom: '0.5rem' }}>Assign Jobs to Team</h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.25rem' }}>Check the active jobs you want this team to work on.</p>
 
         {isLoading ? (
-          <div style={{ color: '#64748b', textAlign: 'center', padding: '2rem' }}>Loading jobs…</div>
+          <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>Loading jobs…</div>
         ) : activeJobs.length === 0 ? (
-          <div style={{ color: '#64748b', textAlign: 'center', padding: '2rem' }}>No active jobs available.</div>
+          <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>No active jobs available.</div>
         ) : (
           <div style={{ overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1rem' }}>
             {activeJobs.map((job: Job) => (
-              <label key={job.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', padding: '0.625rem 0.75rem', borderRadius: '0.5rem', background: selected.has(job.id) ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.02)', border: `1px solid ${selected.has(job.id) ? 'rgba(99,102,241,0.35)' : '#1e2d4a'}`, transition: 'all 0.15s' }}>
+              <label key={job.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', padding: '0.625rem 0.75rem', borderRadius: '0.5rem', background: selected.has(job.id) ? 'rgba(99,102,241,0.12)' : 'var(--bg-input)', border: `1px solid ${selected.has(job.id) ? 'rgba(99,102,241,0.35)' : 'var(--border)'}`, transition: 'all 0.15s' }}>
                 <input type="checkbox" checked={selected.has(job.id)} onChange={() => toggle(job.id)}
                   style={{ accentColor: '#6366f1', width: '16px', height: '16px', flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ color: '#e2e8f0', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{job.job_title}</p>
-                  <p style={{ color: '#64748b', fontSize: '0.73rem' }}>{job.company_name}</p>
+                  <p style={{ color: 'var(--text-primary)', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{job.job_title}</p>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.73rem' }}>{job.company_name}</p>
                 </div>
                 {selected.has(job.id) && <span style={{ color: '#6366f1', fontSize: '0.75rem', fontWeight: 600, flexShrink: 0 }}>✓ Assigned</span>}
               </label>
@@ -180,8 +180,8 @@ function AssignJobsModal({ teamId, currentJobIds, onClose }: { teamId: string; c
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', borderTop: '1px solid #1e2d4a', paddingTop: '1rem' }}>
-          <button onClick={onClose} style={{ padding: '0.625rem 1.25rem', borderRadius: '0.5rem', border: '1px solid #1e2d4a', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: '0.875rem' }}>Cancel</button>
+        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
+          <button onClick={onClose} style={{ padding: '0.625rem 1.25rem', borderRadius: '0.5rem', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.875rem' }}>Cancel</button>
           <button onClick={handleSave} disabled={saving} style={{ padding: '0.625rem 1.5rem', borderRadius: '0.5rem', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', fontSize: '0.875rem', fontWeight: 600, border: 'none' }}>
             {saving ? 'Saving…' : `Save (${selected.size} job${selected.size !== 1 ? 's' : ''})`}
           </button>
@@ -203,10 +203,7 @@ export default function TeamDetailPage() {
 
   const { data, isLoading } = useQuery({ queryKey: ['team', teamId], queryFn: () => teamsApi.get(teamId) });
   const { data: usersData } = useQuery({ queryKey: ['users'], queryFn: () => usersApi.list(), enabled: role === 'admin' || role === 'manager' || role === 'tl' });
-  const { data: assignmentsData, refetch: refetchAssignments } = useQuery({
-    queryKey: ['job-assignments'],
-    queryFn: () => jobAssignmentsApi.list(),
-  });
+  const { data: assignmentsData, refetch: refetchAssignments } = useQuery({ queryKey: ['job-assignments'], queryFn: () => jobAssignmentsApi.list() });
   const allAssignments: JobAssignment[] = assignmentsData?.assignments ?? [];
 
   const canManage = role === 'admin' || role === 'manager';
@@ -222,7 +219,7 @@ export default function TeamDetailPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  if (isLoading) return <div style={{ padding: '2rem', color: '#64748b' }}>Loading team...</div>;
+  if (isLoading) return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>Loading team...</div>;
   if (!team) return <div style={{ padding: '2rem', color: '#ef4444' }}>Team not found</div>;
 
   const STATUS_STYLE = (s: string): React.CSSProperties => ({
@@ -234,38 +231,29 @@ export default function TeamDetailPage() {
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1000px' }}>
-      {/* Modals */}
-      {showAddMember && (
-        <AddMemberModal teamId={teamId} existingIds={members.map((m: TeamMember) => m.user_id)} onClose={() => setShowAddMember(false)} users={allUsers} />
-      )}
+      {showAddMember && <AddMemberModal teamId={teamId} existingIds={members.map((m: TeamMember) => m.user_id)} onClose={() => setShowAddMember(false)} users={allUsers} />}
       {showEditTeam && isAdmin && (
-        <EditTeamModal
-          teamId={teamId} currentName={team.name}
-          currentManagerId={team.manager_id ?? null} currentTlId={team.tl_id ?? null}
-          onClose={() => setShowEditTeam(false)} users={allUsers}
-        />
+        <EditTeamModal teamId={teamId} currentName={team.name} currentManagerId={team.manager_id ?? null} currentTlId={team.tl_id ?? null} onClose={() => setShowEditTeam(false)} users={allUsers} />
       )}
-      {showAssignJobs && (
-        <AssignJobsModal teamId={teamId} currentJobIds={teamJobs.map(j => j.id)} onClose={() => setShowAssignJobs(false)} />
-      )}
+      {showAssignJobs && <AssignJobsModal teamId={teamId} currentJobIds={teamJobs.map(j => j.id)} onClose={() => setShowAssignJobs(false)} />}
 
       {/* Breadcrumb */}
-      <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center', fontSize: '0.875rem', color: '#64748b' }}>
+      <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
         <Link href="/dashboard/teams" style={{ color: '#6366f1', textDecoration: 'none' }}>Teams</Link>
         <span>→</span>
-        <span style={{ color: '#94a3b8' }}>{team.name}</span>
+        <span style={{ color: 'var(--text-secondary)' }}>{team.name}</span>
       </div>
 
       {/* Header Card */}
-      <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.5rem' }}>
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
           <div>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#e2e8f0', marginBottom: '0.75rem' }}>🏢 {team.name}</h1>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.75rem' }}>🏢 {team.name}</h1>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem 1.5rem', fontSize: '0.875rem' }}>
-              <div><span style={{ color: '#64748b' }}>Manager: </span><span style={{ color: '#e2e8f0' }}>{team.manager?.name || team.manager?.email || '—'}</span></div>
-              <div><span style={{ color: '#64748b' }}>Team Lead: </span><span style={{ color: '#22c55e' }}>{team.tl?.name || team.tl?.email || '—'}</span></div>
-              <div><span style={{ color: '#64748b' }}>Members: </span><span style={{ color: '#e2e8f0' }}>{members.length}</span></div>
-              <div><span style={{ color: '#64748b' }}>Jobs: </span><span style={{ color: '#e2e8f0' }}>{team.job_count ?? 0}</span></div>
+              <div><span style={{ color: 'var(--text-muted)' }}>Manager: </span><span style={{ color: 'var(--text-primary)' }}>{team.manager?.name || team.manager?.email || '—'}</span></div>
+              <div><span style={{ color: 'var(--text-muted)' }}>Team Lead: </span><span style={{ color: '#22c55e' }}>{team.tl?.name || team.tl?.email || '—'}</span></div>
+              <div><span style={{ color: 'var(--text-muted)' }}>Members: </span><span style={{ color: 'var(--text-primary)' }}>{members.length}</span></div>
+              <div><span style={{ color: 'var(--text-muted)' }}>Jobs: </span><span style={{ color: 'var(--text-primary)' }}>{team.job_count ?? 0}</span></div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.625rem', flexWrap: 'wrap' }}>
@@ -284,26 +272,26 @@ export default function TeamDetailPage() {
       </div>
 
       {/* Team Members */}
-      <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', overflow: 'hidden', marginBottom: '1.5rem' }}>
-        <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #1e2d4a' }}>
-          <h2 style={{ color: '#e2e8f0', fontWeight: 600, fontSize: '1rem' }}>Team Members</h2>
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', overflow: 'hidden', marginBottom: '1.5rem' }}>
+        <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
+          <h2 style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '1rem' }}>Team Members</h2>
         </div>
         {members.length === 0 ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>No members yet</div>
+          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No members yet</div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: 'rgba(30,45,74,0.3)' }}>
+              <tr style={{ background: 'var(--table-header-bg)' }}>
                 {['Name', 'Email', 'System Role', 'Team Role', ...(canManage ? [''] : [])].map(h => (
-                  <th key={h} style={{ padding: '0.75rem 1.5rem', textAlign: 'left', color: '#64748b', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                  <th key={h} style={{ padding: '0.75rem 1.5rem', textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {members.map((member: TeamMember) => (
-                <tr key={member.id} style={{ borderTop: '1px solid #1e2d4a' }}>
-                  <td style={{ padding: '1rem 1.5rem', color: '#e2e8f0', fontWeight: 500 }}>{member.user?.name || '—'}</td>
-                  <td style={{ padding: '1rem 1.5rem', color: '#94a3b8', fontSize: '0.875rem' }}>{member.user?.email}</td>
+                <tr key={member.id} style={{ borderTop: '1px solid var(--border)' }}>
+                  <td style={{ padding: '1rem 1.5rem', color: 'var(--text-primary)', fontWeight: 500 }}>{member.user?.name || '—'}</td>
+                  <td style={{ padding: '1rem 1.5rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{member.user?.email}</td>
                   <td style={{ padding: '1rem 1.5rem' }}>
                     <span style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', borderRadius: '999px', background: `${ROLE_COLORS[member.user?.role || 'recruiter']}20`, color: ROLE_COLORS[member.user?.role || 'recruiter'], border: `1px solid ${ROLE_COLORS[member.user?.role || 'recruiter']}40` }}>
                       {member.user?.role}
@@ -317,7 +305,7 @@ export default function TeamDetailPage() {
                   {canManage && (
                     <td style={{ padding: '1rem 1.5rem' }}>
                       <button onClick={() => { if (confirm('Remove this member?')) removeMutation.mutate(member.user_id); }}
-                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b', fontSize: '0.875rem' }} title="Remove member">🗑️</button>
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.875rem' }} title="Remove member">🗑️</button>
                     </td>
                   )}
                 </tr>
@@ -328,9 +316,9 @@ export default function TeamDetailPage() {
       </div>
 
       {/* Team Jobs */}
-      <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', overflow: 'hidden' }}>
-        <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #1e2d4a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ color: '#e2e8f0', fontWeight: 600, fontSize: '1rem' }}>Team Jobs <span style={{ color: '#64748b', fontWeight: 400, fontSize: '0.8rem' }}>({teamJobs.length})</span></h2>
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', overflow: 'hidden' }}>
+        <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '1rem' }}>Team Jobs <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '0.8rem' }}>({teamJobs.length})</span></h2>
           <div style={{ display: 'flex', gap: '0.625rem', alignItems: 'center' }}>
             <Link href="/dashboard/jobs" style={{ color: '#6366f1', fontSize: '0.8rem', textDecoration: 'none' }}>All Jobs →</Link>
             {canManage && (
@@ -342,7 +330,7 @@ export default function TeamDetailPage() {
         </div>
 
         {teamJobs.length === 0 ? (
-          <div style={{ padding: '2.5rem', textAlign: 'center', color: '#64748b' }}>
+          <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
             <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>💼</div>
             <p style={{ marginBottom: '0.5rem' }}>No jobs assigned to this team yet.</p>
             {canManage && (
@@ -354,19 +342,19 @@ export default function TeamDetailPage() {
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: 'rgba(30,45,74,0.3)' }}>
+              <tr style={{ background: 'var(--table-header-bg)' }}>
                 {['Job Title', 'Company', 'Status', 'Created', ''].map(h => (
-                  <th key={h} style={{ padding: '0.75rem 1.5rem', textAlign: 'left', color: '#64748b', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                  <th key={h} style={{ padding: '0.75rem 1.5rem', textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {teamJobs.map(job => (
-                <tr key={job.id} style={{ borderTop: '1px solid #1e2d4a' }}>
-                  <td style={{ padding: '0.875rem 1.5rem', color: '#e2e8f0', fontWeight: 500 }}>{job.job_title}</td>
-                  <td style={{ padding: '0.875rem 1.5rem', color: '#94a3b8', fontSize: '0.875rem' }}>{job.company_name}</td>
+                <tr key={job.id} style={{ borderTop: '1px solid var(--border)' }}>
+                  <td style={{ padding: '0.875rem 1.5rem', color: 'var(--text-primary)', fontWeight: 500 }}>{job.job_title}</td>
+                  <td style={{ padding: '0.875rem 1.5rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{job.company_name}</td>
                   <td style={{ padding: '0.875rem 1.5rem' }}><span style={STATUS_STYLE(job.status)}>{job.status}</span></td>
-                  <td style={{ padding: '0.875rem 1.5rem', color: '#64748b', fontSize: '0.8rem' }}>{new Date(job.created_at).toLocaleDateString()}</td>
+                  <td style={{ padding: '0.875rem 1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>{new Date(job.created_at).toLocaleDateString()}</td>
                   <td style={{ padding: '0.875rem 1.5rem' }}>
                     <Link href={`/dashboard/jobs/${job.id}`} style={{ color: '#6366f1', fontSize: '0.8rem', textDecoration: 'none' }}>View →</Link>
                   </td>
@@ -377,15 +365,9 @@ export default function TeamDetailPage() {
         )}
       </div>
 
-      {/* Member Job Assignments — for TL, admin, manager */}
+      {/* Member Job Assignments */}
       {(role === 'tl' || canManage) && members.length > 0 && (
-        <MemberAssignmentsSection
-          teamId={teamId}
-          members={members}
-          teamJobs={teamJobs}
-          allAssignments={allAssignments}
-          onRefetch={refetchAssignments}
-        />
+        <MemberAssignmentsSection teamId={teamId} members={members} teamJobs={teamJobs} allAssignments={allAssignments} onRefetch={refetchAssignments} />
       )}
     </div>
   );
@@ -393,41 +375,30 @@ export default function TeamDetailPage() {
 
 // ─── Member Assignments Section ───────────────────────────────────────────────
 function MemberAssignmentsSection({ teamId, members, teamJobs, allAssignments, onRefetch }: {
-  teamId: string;
-  members: TeamMember[];
+  teamId: string; members: TeamMember[];
   teamJobs: { id: string; job_title: string; company_name: string; status: string; created_at: string }[];
-  allAssignments: JobAssignment[];
-  onRefetch: () => void;
+  allAssignments: JobAssignment[]; onRefetch: () => void;
 }) {
-  // Only show active team jobs in the picker
   const activeTeamJobs = teamJobs.filter(j => j.status === 'active');
 
   return (
-    <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', overflow: 'hidden', marginTop: '1.5rem' }}>
-      <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #1e2d4a' }}>
-        <h2 style={{ color: '#e2e8f0', fontWeight: 600, fontSize: '1rem' }}>
+    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', overflow: 'hidden', marginTop: '1.5rem' }}>
+      <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
+        <h2 style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '1rem' }}>
           Job Assignments
-          <span style={{ color: '#64748b', fontWeight: 400, fontSize: '0.8rem', marginLeft: '0.5rem' }}>— assign team jobs to members</span>
+          <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '0.8rem', marginLeft: '0.5rem' }}>— assign team jobs to members</span>
         </h2>
       </div>
 
       {activeTeamJobs.length === 0 ? (
-        <div style={{ padding: '1.5rem', color: '#475569', fontSize: '0.875rem', textAlign: 'center' }}>
+        <div style={{ padding: '1.5rem', color: 'var(--text-faint)', fontSize: '0.875rem', textAlign: 'center' }}>
           No active jobs in this team to assign.
         </div>
       ) : (
         <div style={{ padding: '1rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {members.map(member => {
             const memberAssignments = allAssignments.filter(a => a.recruiter_id === member.user_id);
-            return (
-              <MemberAssignRow
-                key={member.user_id}
-                member={member}
-                teamJobs={activeTeamJobs}
-                assignments={memberAssignments}
-                onRefetch={onRefetch}
-              />
-            );
+            return <MemberAssignRow key={member.user_id} member={member} teamJobs={activeTeamJobs} assignments={memberAssignments} onRefetch={onRefetch} />;
           })}
         </div>
       )}
@@ -438,17 +409,13 @@ function MemberAssignmentsSection({ teamId, members, teamJobs, allAssignments, o
 function MemberAssignRow({ member, teamJobs, assignments, onRefetch }: {
   member: TeamMember;
   teamJobs: { id: string; job_title: string; company_name: string }[];
-  assignments: JobAssignment[];
-  onRefetch: () => void;
+  assignments: JobAssignment[]; onRefetch: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set(assignments.map(a => a.job_id)));
   const [saving, setSaving] = useState(false);
 
-  // Sync when assignments change externally
-  useEffect(() => {
-    setSelected(new Set(assignments.map(a => a.job_id)));
-  }, [assignments]);
+  useEffect(() => { setSelected(new Set(assignments.map(a => a.job_id))); }, [assignments]);
 
   function toggle(id: string) {
     setSelected(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -459,8 +426,7 @@ function MemberAssignRow({ member, teamJobs, assignments, onRefetch }: {
     try {
       await jobAssignmentsApi.bulkAssign(member.user_id, Array.from(selected));
       toast.success(`Jobs updated for ${member.user?.name || member.user?.email}`);
-      onRefetch();
-      setOpen(false);
+      onRefetch(); setOpen(false);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Failed to save assignments');
     } finally {
@@ -471,15 +437,12 @@ function MemberAssignRow({ member, teamJobs, assignments, onRefetch }: {
   const assignedNow = teamJobs.filter(j => assignments.some(a => a.job_id === j.id));
 
   return (
-    <div style={{ border: '1px solid #1e2d4a', borderRadius: '0.75rem', overflow: 'hidden', background: '#0a0f1e' }}>
+    <div style={{ border: '1px solid var(--border)', borderRadius: '0.75rem', overflow: 'hidden', background: 'var(--bg-base)' }}>
       {/* Member row header */}
       <div style={{ padding: '0.875rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <span style={{ color: '#e2e8f0', fontWeight: 600, fontSize: '0.9rem' }}>{member.user?.name || member.user?.email || '—'}</span>
-          <span style={{ marginLeft: '0.75rem', fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '999px',
-            background: member.role_in_team === 'tl' ? 'rgba(34,197,94,0.1)' : 'rgba(56,189,248,0.1)',
-            color: member.role_in_team === 'tl' ? '#22c55e' : '#38bdf8',
-            border: `1px solid ${member.role_in_team === 'tl' ? 'rgba(34,197,94,0.3)' : 'rgba(56,189,248,0.3)'}` }}>
+          <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '0.9rem' }}>{member.user?.name || member.user?.email || '—'}</span>
+          <span style={{ marginLeft: '0.75rem', fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '999px', background: member.role_in_team === 'tl' ? 'rgba(34,197,94,0.1)' : 'rgba(56,189,248,0.1)', color: member.role_in_team === 'tl' ? '#22c55e' : '#38bdf8', border: `1px solid ${member.role_in_team === 'tl' ? 'rgba(34,197,94,0.3)' : 'rgba(56,189,248,0.3)'}` }}>
             {member.role_in_team === 'tl' ? 'Team Leader' : 'Recruiter'}
           </span>
         </div>
@@ -493,7 +456,7 @@ function MemberAssignRow({ member, teamJobs, assignments, onRefetch }: {
       {!open && (
         <div style={{ padding: '0 1.25rem 0.875rem', display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
           {assignedNow.length === 0 ? (
-            <span style={{ color: '#475569', fontSize: '0.775rem' }}>No jobs assigned yet</span>
+            <span style={{ color: 'var(--text-faint)', fontSize: '0.775rem' }}>No jobs assigned yet</span>
           ) : assignedNow.map(j => (
             <span key={j.id} style={{ padding: '0.2rem 0.625rem', borderRadius: '4px', fontSize: '0.73rem', background: 'rgba(99,102,241,0.12)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.25)' }}>
               {j.job_title}
@@ -504,20 +467,20 @@ function MemberAssignRow({ member, teamJobs, assignments, onRefetch }: {
 
       {/* Job picker */}
       {open && (
-        <div style={{ borderTop: '1px solid #1e2d4a', padding: '0.875rem 1.25rem', background: '#0d1526' }}>
-          <p style={{ color: '#64748b', fontSize: '0.78rem', marginBottom: '0.625rem' }}>Select jobs to assign (team jobs only):</p>
+        <div style={{ borderTop: '1px solid var(--border)', padding: '0.875rem 1.25rem', background: 'var(--bg-card)' }}>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginBottom: '0.625rem' }}>Select jobs to assign (team jobs only):</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '200px', overflowY: 'auto', marginBottom: '0.875rem' }}>
             {teamJobs.map(job => (
               <label key={job.id} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', cursor: 'pointer', padding: '0.45rem 0.625rem', borderRadius: '0.375rem', background: selected.has(job.id) ? 'rgba(99,102,241,0.1)' : 'transparent', transition: 'background 0.15s' }}>
                 <input type="checkbox" checked={selected.has(job.id)} onChange={() => toggle(job.id)}
                   style={{ accentColor: '#6366f1', width: '15px', height: '15px', flexShrink: 0 }} />
-                <span style={{ color: '#e2e8f0', fontSize: '0.825rem', flex: 1 }}>{job.job_title}</span>
-                <span style={{ color: '#64748b', fontSize: '0.73rem' }}>{job.company_name}</span>
+                <span style={{ color: 'var(--text-primary)', fontSize: '0.825rem', flex: 1 }}>{job.job_title}</span>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.73rem' }}>{job.company_name}</span>
               </label>
             ))}
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-            <button onClick={() => setOpen(false)} style={{ padding: '0.4rem 0.875rem', borderRadius: '0.375rem', border: '1px solid #1e2d4a', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: '0.8rem' }}>Cancel</button>
+            <button onClick={() => setOpen(false)} style={{ padding: '0.4rem 0.875rem', borderRadius: '0.375rem', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem' }}>Cancel</button>
             <button onClick={handleSave} disabled={saving} style={{ padding: '0.4rem 1rem', borderRadius: '0.375rem', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>
               {saving ? 'Saving…' : `Save (${selected.size} job${selected.size !== 1 ? 's' : ''})`}
             </button>
