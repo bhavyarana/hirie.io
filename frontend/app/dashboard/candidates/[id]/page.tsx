@@ -1,10 +1,9 @@
 'use client';
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { candidatesApi } from '@/lib/api';
 import Link from 'next/link';
 import { use } from 'react';
-import { toast } from 'sonner';
 
 interface Props { params: Promise<{ id: string }> }
 
@@ -27,13 +26,13 @@ function ScoreRing({ score }: { score: number }) {
   return (
     <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
       <svg width="100" height="100" style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx="50" cy="50" r={r} fill="none" stroke="#1e2d4a" strokeWidth="8" />
+        <circle cx="50" cy="50" r={r} fill="none" stroke="var(--border)" strokeWidth="8" />
         <circle cx="50" cy="50" r={r} fill="none" stroke={color} strokeWidth="8"
           strokeDasharray={`${fill} ${circ - fill}`} strokeLinecap="round" />
       </svg>
       <div style={{ position: 'absolute', textAlign: 'center' }}>
         <div style={{ fontSize: '1.5rem', fontWeight: 800, color }}>{Math.round(score)}</div>
-        <div style={{ fontSize: '0.625rem', color: '#64748b' }}>/ 100</div>
+        <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)' }}>/ 100</div>
       </div>
     </div>
   );
@@ -41,7 +40,7 @@ function ScoreRing({ score }: { score: number }) {
 
 function ProgressBar({ value, color = '#6366f1' }: { value: number; color?: string }) {
   return (
-    <div style={{ background: '#1e2d4a', borderRadius: '999px', height: '8px' }}>
+    <div style={{ background: 'var(--bg-input)', borderRadius: '999px', height: '8px' }}>
       <div style={{ background: color, height: '100%', borderRadius: '999px', width: `${Math.min(100, value)}%`, transition: 'width 0.5s ease' }} />
     </div>
   );
@@ -49,7 +48,6 @@ function ProgressBar({ value, color = '#6366f1' }: { value: number; color?: stri
 
 export default function CandidateDetailPage({ params }: Props) {
   const { id } = use(params);
-  const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: ['candidate', id],
@@ -62,7 +60,7 @@ export default function CandidateDetailPage({ params }: Props) {
 
   if (isLoading) {
     return (
-      <div style={{ padding: '2rem', color: '#64748b', textAlign: 'center' }}>
+      <div style={{ padding: '2rem', color: 'var(--text-muted)', textAlign: 'center' }}>
         <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>⟳</div>
         Loading candidate…
       </div>
@@ -83,18 +81,18 @@ export default function CandidateDetailPage({ params }: Props) {
   return (
     <div style={{ padding: '2rem', maxWidth: '1000px' }}>
       {/* Breadcrumb */}
-      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: '#64748b', fontSize: '0.8rem', marginBottom: '1.5rem' }}>
-        <Link href="/dashboard/jobs" style={{ color: '#64748b', textDecoration: 'none' }}>Jobs</Link>
+      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.5rem' }}>
+        <Link href="/dashboard/jobs" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Jobs</Link>
         <span>›</span>
         {candidate.job && (
-          <><Link href={`/dashboard/jobs/${candidate.job.id}`} style={{ color: '#64748b', textDecoration: 'none' }}>{candidate.job.job_title}</Link><span>›</span></>
+          <><Link href={`/dashboard/jobs/${candidate.job.id}`} style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>{candidate.job.job_title}</Link><span>›</span></>
         )}
-        <span style={{ color: '#94a3b8' }}>{candidate.name || candidate.resume_file_name}</span>
+        <span style={{ color: 'var(--text-secondary)' }}>{candidate.name || candidate.resume_file_name}</span>
       </div>
 
       {/* Hero card */}
       <div style={{
-        background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem',
+        background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem',
         padding: '1.75rem', marginBottom: '1.5rem',
         display: 'flex', gap: '2rem', alignItems: 'flex-start', flexWrap: 'wrap',
       }}>
@@ -110,25 +108,25 @@ export default function CandidateDetailPage({ params }: Props) {
 
         {/* Info block */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ fontSize: '1.375rem', fontWeight: 700, color: '#e2e8f0', marginBottom: '0.25rem' }}>
+          <h1 style={{ fontSize: '1.375rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
             {candidate.name || 'Unknown Candidate'}
           </h1>
           {candidate.job && (
-            <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
-              Applied for: <span style={{ color: '#a5b4fc' }}>{candidate.job.job_title}</span> at {candidate.job.company_name}
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+              Applied for: <span style={{ color: '#6366f1' }}>{candidate.job.job_title}</span> at {candidate.job.company_name}
             </p>
           )}
           <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
-            {candidate.email && <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>✉️ {candidate.email}</span>}
-            {candidate.phone && <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>📞 {candidate.phone}</span>}
-            {candidate.current_location && <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>📍 {candidate.current_location}</span>}
+            {candidate.email && <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>✉️ {candidate.email}</span>}
+            {candidate.phone && <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>📞 {candidate.phone}</span>}
+            {candidate.current_location && <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>📍 {candidate.current_location}</span>}
             {candidate.recruiter_name && (
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
                 padding: '0.2rem 0.625rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 500,
-                background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', color: '#a5b4fc',
+                background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', color: '#6366f1',
               }}>
-                👤 Added by <strong style={{ color: '#e2e8f0' }}>{candidate.recruiter_name}</strong>
+                👤 Added by <strong style={{ color: 'var(--text-primary)' }}>{candidate.recruiter_name}</strong>
               </span>
             )}
           </div>
@@ -148,9 +146,9 @@ export default function CandidateDetailPage({ params }: Props) {
                 <div style={{
                   padding: '0.6rem 0.875rem', borderRadius: '0.5rem',
                   background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)',
-                  color: '#fca5a5', fontSize: '0.8rem', lineHeight: 1.5, maxWidth: '480px',
+                  color: '#ef4444', fontSize: '0.8rem', lineHeight: 1.5, maxWidth: '480px',
                 }}>
-                  <span style={{ color: '#ef4444', fontWeight: 600 }}>Rejection reason: </span>
+                  <span style={{ fontWeight: 600 }}>Rejection reason: </span>
                   {candidate.rejection_reason}
                 </div>
               )}
@@ -158,9 +156,9 @@ export default function CandidateDetailPage({ params }: Props) {
                 <div style={{
                   padding: '0.6rem 0.875rem', borderRadius: '0.5rem',
                   background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.2)',
-                  color: '#a5b4fc', fontSize: '0.8rem', lineHeight: 1.5, maxWidth: '480px',
+                  color: '#6366f1', fontSize: '0.8rem', lineHeight: 1.5, maxWidth: '480px',
                 }}>
-                  <span style={{ color: '#6366f1', fontWeight: 600 }}>📝 Notes: </span>
+                  <span style={{ fontWeight: 600 }}>📝 Notes: </span>
                   {candidate.hiring_feedback}
                 </div>
               )}
@@ -180,7 +178,7 @@ export default function CandidateDetailPage({ params }: Props) {
               }}>{score.status}</span>
             </>
           ) : (
-            <div style={{ color: '#64748b', fontSize: '0.875rem', textAlign: 'center' }}>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem', textAlign: 'center' }}>
               {candidate.processing_status === 'processing' ? '⟳ Scoring…' : '⏳ Pending'}
             </div>
           )}
@@ -195,7 +193,7 @@ export default function CandidateDetailPage({ params }: Props) {
             ) : (
               <button disabled style={{
                 padding: '0.625rem 1.25rem', borderRadius: '0.5rem',
-                background: '#1e2d4a', color: '#64748b', border: '1px solid #2d3f5f',
+                background: 'var(--bg-input)', color: 'var(--text-muted)', border: '1px solid var(--border)',
                 fontSize: '0.875rem', cursor: 'not-allowed',
               }}>Resume N/A</button>
             )}
@@ -206,17 +204,17 @@ export default function CandidateDetailPage({ params }: Props) {
       {score && (
         <>
           {/* AI Summary */}
-          <div style={{ background: '#0d1526', border: '1px solid rgba(99,102,241,0.25)', borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.5rem', position: 'relative', overflow: 'hidden' }}>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.5rem', position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2px', background: 'linear-gradient(90deg, #6366f1, #8b5cf6)' }} />
-            <h2 style={{ color: '#e2e8f0', fontWeight: 600, marginBottom: '0.75rem', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <h2 style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: '0.75rem', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               🤖 AI Summary
             </h2>
-            <p style={{ color: '#94a3b8', lineHeight: 1.7, fontSize: '0.9rem' }}>{score.summary}</p>
+            <p style={{ color: 'var(--text-secondary)', lineHeight: 1.7, fontSize: '0.9rem' }}>{score.summary}</p>
           </div>
 
           {/* Score Breakdown */}
-          <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.5rem' }}>
-            <h2 style={{ color: '#e2e8f0', fontWeight: 600, marginBottom: '1.25rem', fontSize: '1rem' }}>Score Breakdown</h2>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.5rem' }}>
+            <h2 style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: '1.25rem', fontSize: '1rem' }}>Score Breakdown</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {[
                 { label: 'Overall Fit', value: score.score, color: score.score >= 70 ? '#22c55e' : score.score >= 50 ? '#f59e0b' : '#ef4444' },
@@ -225,7 +223,7 @@ export default function CandidateDetailPage({ params }: Props) {
               ].map(item => (
                 <div key={item.label}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
-                    <span style={{ color: '#94a3b8', fontSize: '0.875rem' }}>{item.label}</span>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{item.label}</span>
                     <span style={{ color: item.color, fontWeight: 700, fontSize: '0.875rem' }}>{Math.round(item.value)}%</span>
                   </div>
                   <ProgressBar value={item.value} color={item.color} />
@@ -236,21 +234,21 @@ export default function CandidateDetailPage({ params }: Props) {
 
           {/* Strengths & Weaknesses */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
-            <div style={{ background: '#0d1526', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '1rem', padding: '1.5rem' }}>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '1rem', padding: '1.5rem' }}>
               <h2 style={{ color: '#22c55e', fontWeight: 600, marginBottom: '1rem', fontSize: '0.9rem' }}>✅ Strengths</h2>
               <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {score.strengths.map((s, i) => (
-                  <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', color: '#94a3b8', fontSize: '0.8rem', lineHeight: 1.5 }}>
+                  <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.5 }}>
                     <span style={{ color: '#22c55e', flexShrink: 0 }}>•</span> {s}
                   </li>
                 ))}
               </ul>
             </div>
-            <div style={{ background: '#0d1526', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '1rem', padding: '1.5rem' }}>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '1rem', padding: '1.5rem' }}>
               <h2 style={{ color: '#ef4444', fontWeight: 600, marginBottom: '1rem', fontSize: '0.9rem' }}>⚠️ Weaknesses</h2>
               <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 {score.weaknesses.map((w, i) => (
-                  <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', color: '#94a3b8', fontSize: '0.8rem', lineHeight: 1.5 }}>
+                  <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.8rem', lineHeight: 1.5 }}>
                     <span style={{ color: '#ef4444', flexShrink: 0 }}>•</span> {w}
                   </li>
                 ))}
@@ -260,22 +258,22 @@ export default function CandidateDetailPage({ params }: Props) {
 
           {/* Skills */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-            <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', padding: '1.5rem' }}>
-              <h2 style={{ color: '#e2e8f0', fontWeight: 600, marginBottom: '1rem', fontSize: '0.9rem' }}>✅ Matched Skills</h2>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '1.5rem' }}>
+              <h2 style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: '1rem', fontSize: '0.9rem' }}>✅ Matched Skills</h2>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                 {score.matched_skills.map(s => (
-                  <span key={s} style={{ padding: '0.25rem 0.625rem', borderRadius: '4px', fontSize: '0.75rem', background: 'rgba(34,197,94,0.1)', color: '#86efac', border: '1px solid rgba(34,197,94,0.2)' }}>{s}</span>
+                  <span key={s} style={{ padding: '0.25rem 0.625rem', borderRadius: '4px', fontSize: '0.75rem', background: 'rgba(34,197,94,0.1)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.3)' }}>{s}</span>
                 ))}
-                {score.matched_skills.length === 0 && <span style={{ color: '#64748b', fontSize: '0.8rem' }}>None detected</span>}
+                {score.matched_skills.length === 0 && <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>None detected</span>}
               </div>
             </div>
-            <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', padding: '1.5rem' }}>
-              <h2 style={{ color: '#e2e8f0', fontWeight: 600, marginBottom: '1rem', fontSize: '0.9rem' }}>❌ Missing Skills</h2>
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '1.5rem' }}>
+              <h2 style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: '1rem', fontSize: '0.9rem' }}>❌ Missing Skills</h2>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                 {score.missing_skills.map(s => (
-                  <span key={s} style={{ padding: '0.25rem 0.625rem', borderRadius: '4px', fontSize: '0.75rem', background: 'rgba(239,68,68,0.1)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.2)' }}>{s}</span>
+                  <span key={s} style={{ padding: '0.25rem 0.625rem', borderRadius: '4px', fontSize: '0.75rem', background: 'rgba(239,68,68,0.1)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.3)' }}>{s}</span>
                 ))}
-                {score.missing_skills.length === 0 && <span style={{ color: '#64748b', fontSize: '0.8rem' }}>None missing</span>}
+                {score.missing_skills.length === 0 && <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>None missing</span>}
               </div>
             </div>
           </div>
@@ -285,7 +283,7 @@ export default function CandidateDetailPage({ params }: Props) {
       {!score && candidate.processing_status === 'failed' && (
         <div style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '1rem', padding: '1.5rem' }}>
           <h3 style={{ color: '#ef4444', marginBottom: '0.5rem' }}>Processing Failed</h3>
-          <p style={{ color: '#94a3b8', fontSize: '0.875rem' }}>{candidate.error_message || 'Unknown error occurred during processing.'}</p>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>{candidate.error_message || 'Unknown error occurred during processing.'}</p>
         </div>
       )}
     </div>
