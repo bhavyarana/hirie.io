@@ -80,7 +80,7 @@ function PipelineBadge({ status }: { status: string }) {
 
 function SkillChip({ label }: { label: string }) {
   return (
-    <span style={{ padding: '0.18rem 0.55rem', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 500, background: 'rgba(99,102,241,0.1)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.2)', whiteSpace: 'nowrap' }}>
+    <span style={{ padding: '0.18rem 0.55rem', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 500, background: 'rgba(99,102,241,0.1)', color: '#6366f1', border: '1px solid rgba(99,102,241,0.2)', whiteSpace: 'nowrap' }}>
       {label}
     </span>
   );
@@ -102,17 +102,17 @@ function HiringStatusEditor({ c, onSave }: {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingTop: '0.5rem', borderTop: '1px solid #1e2d4a' }}>
-      <label style={{ color: '#475569', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Hiring Status</label>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
+      <label style={{ color: 'var(--text-faint)', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Hiring Status</label>
 
       {/* Status dropdown */}
       <select
         value={localStatus}
         onChange={e => setLocalStatus(e.target.value)}
         style={{
-          background: '#111827', border: '1px solid #1e2d4a', borderRadius: '0.5rem',
+          background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: '0.5rem',
           padding: '0.35rem 0.5rem', fontSize: '0.78rem', cursor: 'pointer',
-          color: localStatus ? (HIRING_COLOR[localStatus] || '#e2e8f0') : '#64748b',
+          color: localStatus ? (HIRING_COLOR[localStatus] || 'var(--text-primary)') : 'var(--text-muted)',
           fontWeight: localStatus ? 600 : 400,
         }}
       >
@@ -129,8 +129,8 @@ function HiringStatusEditor({ c, onSave }: {
           onChange={e => setReason(e.target.value)}
           placeholder="Reason for rejection…"
           style={{
-            background: '#111827', border: '1px solid rgba(239,68,68,0.4)',
-            borderRadius: '0.5rem', padding: '0.35rem 0.6rem', color: '#fca5a5',
+            background: 'var(--bg-input)', border: '1px solid rgba(239,68,68,0.4)',
+            borderRadius: '0.5rem', padding: '0.35rem 0.6rem', color: '#ef4444',
             fontSize: '0.78rem', outline: 'none',
           }}
         />
@@ -144,8 +144,8 @@ function HiringStatusEditor({ c, onSave }: {
           placeholder="Add notes / feedback (optional)…"
           rows={2}
           style={{
-            background: '#111827', border: '1px solid #1e2d4a', borderRadius: '0.5rem',
-            padding: '0.4rem 0.6rem', color: '#94a3b8', fontSize: '0.75rem',
+            background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: '0.5rem',
+            padding: '0.4rem 0.6rem', color: 'var(--text-secondary)', fontSize: '0.75rem',
             outline: 'none', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5,
           }}
         />
@@ -157,7 +157,7 @@ function HiringStatusEditor({ c, onSave }: {
           onClick={handleSave}
           style={{
             padding: '0.35rem 1rem', borderRadius: '0.5rem', border: '1px solid rgba(99,102,241,0.4)',
-            background: 'rgba(99,102,241,0.12)', color: '#a5b4fc', fontSize: '0.75rem',
+            background: 'rgba(99,102,241,0.12)', color: '#6366f1', fontSize: '0.75rem',
             fontWeight: 600, cursor: 'pointer', alignSelf: 'flex-end',
           }}
         >
@@ -183,7 +183,7 @@ function CandidateCard({ c, canUpdatePipeline, canUpdateHiring, onPipelineChange
   return (
     <div
       style={{
-        background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem',
+        background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem',
         padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem',
         transition: 'border-color 0.2s, box-shadow 0.2s',
       }}
@@ -192,7 +192,7 @@ function CandidateCard({ c, canUpdatePipeline, canUpdateHiring, onPipelineChange
         (e.currentTarget as HTMLDivElement).style.boxShadow = '0 4px 24px rgba(99,102,241,0.06)';
       }}
       onMouseLeave={e => {
-        (e.currentTarget as HTMLDivElement).style.borderColor = '#1e2d4a';
+        (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)';
         (e.currentTarget as HTMLDivElement).style.boxShadow = 'none';
       }}
     >
@@ -210,15 +210,15 @@ function CandidateCard({ c, canUpdatePipeline, canUpdateHiring, onPipelineChange
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
             <Link href={`/dashboard/candidates/${c.id}`} style={{ textDecoration: 'none' }}>
-              <p style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>
+              <p style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>
                 {c.name || '(Name pending)'}
               </p>
             </Link>
             <ScorePill score={c.score} status={c.score_status} />
           </div>
-          {c.email && <p style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '0.1rem' }}>{c.email}</p>}
+          {c.email && <p style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginTop: '0.1rem' }}>{c.email}</p>}
           <div style={{ marginTop: '0.25rem' }}>
-            {c.processing_status === 'pending' && <span style={{ fontSize: '0.68rem', color: '#64748b' }}>⏳ Pending</span>}
+            {c.processing_status === 'pending' && <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>⏳ Pending</span>}
             {c.processing_status === 'processing' && <span style={{ fontSize: '0.68rem', color: '#6366f1' }}>⚡ Scoring…</span>}
             {c.processing_status === 'failed' && <span style={{ fontSize: '0.68rem', color: '#ef4444' }}>⚠ Failed</span>}
           </div>
@@ -230,14 +230,14 @@ function CandidateCard({ c, canUpdatePipeline, canUpdateHiring, onPipelineChange
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
           {topSkills.map(s => <SkillChip key={s} label={s} />)}
           {(c.matched_skills || []).length > 4 && (
-            <span style={{ color: '#475569', fontSize: '0.68rem', alignSelf: 'center' }}>+{c.matched_skills.length - 4} more</span>
+            <span style={{ color: 'var(--text-faint)', fontSize: '0.68rem', alignSelf: 'center' }}>+{c.matched_skills.length - 4} more</span>
           )}
         </div>
       )}
 
       {/* Summary */}
       {c.summary && (
-        <p style={{ color: '#64748b', fontSize: '0.75rem', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
           {c.summary}
         </p>
       )}
@@ -247,8 +247,8 @@ function CandidateCard({ c, canUpdatePipeline, canUpdateHiring, onPipelineChange
         <PipelineBadge status={c.status} />
         {c.hiring_status && <HiringBadge status={c.hiring_status} />}
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-          {c.recruiter_name && <span style={{ color: '#475569', fontSize: '0.68rem' }}>👤 {c.recruiter_name}</span>}
-          <span style={{ color: '#475569', fontSize: '0.68rem' }}>🗓 {new Date(c.created_at).toLocaleDateString()}</span>
+          {c.recruiter_name && <span style={{ color: 'var(--text-faint)', fontSize: '0.68rem' }}>👤 {c.recruiter_name}</span>}
+          <span style={{ color: 'var(--text-faint)', fontSize: '0.68rem' }}>🗓 {new Date(c.created_at).toLocaleDateString()}</span>
         </div>
       </div>
 
@@ -256,7 +256,7 @@ function CandidateCard({ c, canUpdatePipeline, canUpdateHiring, onPipelineChange
       <div style={{ display: 'flex', gap: '0.5rem' }}>
         <Link
           href={`/dashboard/candidates/${c.id}`}
-          style={{ flex: 1, textAlign: 'center', padding: '0.4rem', borderRadius: '0.5rem', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.25)', color: '#a5b4fc', fontSize: '0.78rem', fontWeight: 600, textDecoration: 'none' }}
+          style={{ flex: 1, textAlign: 'center', padding: '0.4rem', borderRadius: '0.5rem', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.25)', color: '#6366f1', fontSize: '0.78rem', fontWeight: 600, textDecoration: 'none' }}
         >
           View Profile →
         </Link>
@@ -264,7 +264,7 @@ function CandidateCard({ c, canUpdatePipeline, canUpdateHiring, onPipelineChange
           <select
             value={c.status}
             onChange={e => onPipelineChange(c.id, e.target.value)}
-            style={{ background: '#111827', border: '1px solid #1e2d4a', borderRadius: '0.5rem', padding: '0.3rem 0.5rem', color: '#94a3b8', fontSize: '0.72rem', cursor: 'pointer' }}
+            style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.3rem 0.5rem', color: 'var(--text-secondary)', fontSize: '0.72rem', cursor: 'pointer' }}
           >
             {PIPELINE_STATUSES.map(s => (
               <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
@@ -325,18 +325,18 @@ export default function CandidatesPage() {
     <div style={{ padding: '2rem', maxWidth: '1300px' }}>
       {/* Header */}
       <div style={{ marginBottom: '1.75rem' }}>
-        <h1 style={{ fontSize: '1.6rem', fontWeight: 700, color: '#e2e8f0' }}>📋 My Candidates</h1>
-        <p style={{ color: '#64748b', marginTop: '0.25rem', fontSize: '0.875rem' }}>
+        <h1 style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--text-primary)' }}>📋 My Candidates</h1>
+        <p style={{ color: 'var(--text-muted)', marginTop: '0.25rem', fontSize: '0.875rem' }}>
           {role === 'admin' || role === 'manager' ? 'Candidate pipeline across jobs' : 'Candidates you personally uploaded'}
         </p>
       </div>
 
       {/* Filters bar */}
-      <div style={{ background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem', padding: '1rem 1.25rem', marginBottom: '1.5rem', display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '1rem 1.25rem', marginBottom: '1.5rem', display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 220px' }}>
-          <label style={{ color: '#64748b', fontSize: '0.72rem', display: 'block', marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Select Job</label>
+          <label style={{ color: 'var(--text-muted)', fontSize: '0.72rem', display: 'block', marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Select Job</label>
           <select value={selectedJobId} onChange={e => setSelectedJobId(e.target.value)}
-            style={{ width: '100%', background: '#111827', border: '1px solid #1e2d4a', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', color: '#e2e8f0', fontSize: '0.875rem' }}>
+            style={{ width: '100%', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', color: 'var(--text-primary)', fontSize: '0.875rem' }}>
             <option value="">— Pick a job —</option>
             {jobs.map(j => (
               <option key={j.id} value={j.id}>{j.job_title} — {j.company_name}</option>
@@ -349,15 +349,15 @@ export default function CandidatesPage() {
               style={{
                 padding: '0.35rem 0.8rem', borderRadius: '999px', border: '1px solid', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 500, transition: 'all 0.15s',
                 background: scoreFilter === f.value ? '#6366f1' : 'transparent',
-                color: scoreFilter === f.value ? '#fff' : (f.color || '#64748b'),
-                borderColor: scoreFilter === f.value ? '#6366f1' : '#1e2d4a',
+                color: scoreFilter === f.value ? '#fff' : (f.color || 'var(--text-muted)'),
+                borderColor: scoreFilter === f.value ? '#6366f1' : 'var(--border)',
               }}>
               {f.label}
             </button>
           ))}
         </div>
         {selectedJobId && !isLoading && (
-          <span style={{ marginLeft: 'auto', color: '#475569', fontSize: '0.78rem' }}>
+          <span style={{ marginLeft: 'auto', color: 'var(--text-faint)', fontSize: '0.78rem' }}>
             {candidates.length} candidate{candidates.length !== 1 ? 's' : ''}
           </span>
         )}
@@ -365,20 +365,20 @@ export default function CandidatesPage() {
 
       {/* States */}
       {!selectedJobId ? (
-        <div style={{ padding: '5rem', textAlign: 'center', background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem' }}>
+        <div style={{ padding: '5rem', textAlign: 'center', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem' }}>
           <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>👥</div>
-          <p style={{ color: '#94a3b8', fontWeight: 500 }}>Select a job to view candidates</p>
+          <p style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>Select a job to view candidates</p>
         </div>
       ) : isLoading ? (
-        <div style={{ padding: '4rem', textAlign: 'center', color: '#64748b' }}>
+        <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)' }}>
           <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⏳</div>
           <p>Loading candidates…</p>
         </div>
       ) : candidates.length === 0 ? (
-        <div style={{ padding: '4rem', textAlign: 'center', background: '#0d1526', border: '1px solid #1e2d4a', borderRadius: '1rem' }}>
+        <div style={{ padding: '4rem', textAlign: 'center', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem' }}>
           <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📄</div>
-          <p style={{ color: '#94a3b8', fontWeight: 500 }}>No candidates found</p>
-          <p style={{ color: '#64748b', fontSize: '0.875rem', marginTop: '0.5rem' }}>
+          <p style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>No candidates found</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.5rem' }}>
             {role === 'recruiter' || role === 'tl' ? (
               <Link href={`/dashboard/jobs/${selectedJobId}`} style={{ color: '#6366f1', textDecoration: 'none' }}>Upload resumes for this job →</Link>
             ) : 'No candidates match the current filter.'}
@@ -387,7 +387,7 @@ export default function CandidatesPage() {
       ) : (
         <>
           <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ color: '#94a3b8', fontSize: '0.85rem', fontWeight: 500 }}>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', fontWeight: 500 }}>
               {candidates.length} candidate{candidates.length !== 1 ? 's' : ''}
             </span>
             <Link href={`/dashboard/jobs/${selectedJobId}`} style={{ color: '#6366f1', fontSize: '0.8rem', textDecoration: 'none' }}>View Job →</Link>

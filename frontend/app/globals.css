@@ -309,10 +309,25 @@ textarea::placeholder {
   background: rgba(248, 250, 252, 0.92) !important;
 }
 
+/* ── #111827 backgrounds (used in selects, inputs, filter bars on candidates page) ── */
+[data-theme="light"] [style*="background: #111827"],
+[data-theme="light"] [style*="background:#111827"] {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
 /* ── Loading screen hardcoded dark bg ── */
 [data-theme="light"] [style*="background: #0a0f1e"][style*="minHeight"] {
   background: #f1f5f9 !important;
 }
+
+/* ── Filter bar buttons: borderColor #1e2d4a inline variant ── */
+[data-theme="light"] [style*="borderColor: #1e2d4a"],
+[data-theme="light"] [style*="borderColor:#1e2d4a"] {
+  border-color: #e2e8f0 !important;
+}
+
 
 /* ── Fix select arrow visibility ── */
 [data-theme="light"] select {
