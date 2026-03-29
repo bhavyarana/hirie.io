@@ -234,7 +234,7 @@ router.get('/:id', async (req, res) => {
 
 // PATCH /api/jobs/:id - Update a job (admin, manager)
 router.patch('/:id', requireRole('admin', 'manager'), async (req, res) => {
-  const allowedFields = ['job_title', 'company_name', 'job_description_text', 'required_skills', 'status', 'assigned_team_id'];
+  const allowedFields = ['job_title', 'company_name', 'job_description_text', 'required_skills', 'status', 'assigned_team_id', 'scoring_criteria'];
   const updates = {};
   allowedFields.forEach(field => {
     if (req.body[field] !== undefined) updates[field] = req.body[field];

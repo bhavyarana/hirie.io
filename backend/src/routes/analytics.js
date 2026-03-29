@@ -4,12 +4,22 @@ const supabase = require('../config/supabase');
 const authMiddleware = require('../middleware/auth');
 const logger = require('../config/logger');
 
-// ─── Helper: compute funnel from rows that have resume_scores joined ─────────
-function enrichAndFunnel(rows) {
+// ── Helper: compute funnel from rows that have resume_scores joined ──────────
+function deriveStatus(score, criteria) {
+  if (score == null) return null;
+  const pass   = criteria?.pass_threshold   ?? 70;
+  const review = criteria?.review_threshold ?? 50;
+  if (score >= pass)   return 'pass';
+  if (score >= review) return 'review';
+  return 'fail';
+}
+
+function enrichAndFunnel(rows, criteria = null) {
   const enriched = (rows || []).map(c => ({
     ...c,
     score: c.resume_scores?.[0]?.score ?? null,
-    score_status: c.resume_scores?.[0]?.status ?? null,
+    // Derive status from current criteria — don't trust stored value
+    score_status: deriveStatus(c.resume_scores?.[0]?.score ?? null, criteria),
     matched_skills: c.resume_scores?.[0]?.matched_skills ?? [],
   }));
   const completed = enriched.filter(c => c.processing_status === 'completed');
@@ -42,10 +52,12 @@ router.get('/jobs/:id/analytics', authMiddleware, async (req, res) => {
 
   const { data: job } = await supabase
     .from('jobs')
-    .select('id, job_title, company_name')
+    .select('id, job_title, company_name, scoring_criteria')
     .eq('id', jobId)
     .single();
   if (!job) return res.status(404).json({ error: 'Job not found' });
+
+  const criteria = job.scoring_criteria || null;
 
   // Join resume_scores to get score data (same pattern as candidates list endpoint)
   const { data: rows, error } = await supabase
@@ -59,10 +71,10 @@ router.get('/jobs/:id/analytics', authMiddleware, async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 
-  // Flatten score data from joined resume_scores
+  // Flatten score data — re-derive status from current job criteria
   const scored = (rows || []).map(c => ({
     score: c.resume_scores?.[0]?.score ?? null,
-    score_status: c.resume_scores?.[0]?.status ?? null,
+    score_status: deriveStatus(c.resume_scores?.[0]?.score ?? null, criteria),
     matched_skills: c.resume_scores?.[0]?.matched_skills ?? [],
     missing_skills: c.resume_scores?.[0]?.missing_skills ?? [],
     strengths: c.resume_scores?.[0]?.strengths ?? [],

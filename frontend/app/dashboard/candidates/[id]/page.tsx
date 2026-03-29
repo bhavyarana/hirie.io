@@ -19,8 +19,8 @@ const HIRING_STATUSES = [
   { value: 'duplicate',       label: 'Duplicate',         color: '#64748b' },
 ];
 
-function ScoreRing({ score }: { score: number }) {
-  const color = score >= 70 ? '#22c55e' : score >= 50 ? '#f59e0b' : '#ef4444';
+function ScoreRing({ score, statusColor }: { score: number; statusColor: string }) {
+  const color = statusColor;
   const r = 40, circ = 2 * Math.PI * r;
   const fill = (score / 100) * circ;
   return (
@@ -170,7 +170,7 @@ export default function CandidateDetailPage({ params }: Props) {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
           {score ? (
             <>
-              <ScoreRing score={score.score} />
+              <ScoreRing score={score.score} statusColor={statusColor} />
               <span style={{
                 padding: '0.375rem 1rem', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 700,
                 textTransform: 'uppercase', letterSpacing: '0.05em',
@@ -217,7 +217,7 @@ export default function CandidateDetailPage({ params }: Props) {
             <h2 style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: '1.25rem', fontSize: '1rem' }}>Score Breakdown</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {[
-                { label: 'Overall Fit', value: score.score, color: score.score >= 70 ? '#22c55e' : score.score >= 50 ? '#f59e0b' : '#ef4444' },
+                { label: 'Overall Fit', value: score.score, color: statusColor },
                 { label: 'Experience Match', value: score.experience_match, color: '#6366f1' },
                 { label: 'Education Match', value: score.education_match, color: '#8b5cf6' },
               ].map(item => (

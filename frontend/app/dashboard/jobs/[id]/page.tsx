@@ -666,7 +666,7 @@ export default function JobDetailPage({ params }: Props) {
                             <div>
                               <span style={{
                                 fontSize: '1.125rem', fontWeight: 700,
-                                color: c.score >= 70 ? '#22c55e' : c.score >= 50 ? '#f59e0b' : '#ef4444',
+                                color: c.score_status === 'pass' ? '#22c55e' : c.score_status === 'review' ? '#f59e0b' : '#ef4444',
                               }}>{Math.round(c.score)}</span>
                               <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>/100</span>
                             </div>

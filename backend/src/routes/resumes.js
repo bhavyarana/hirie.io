@@ -162,7 +162,7 @@ router.post('/jobs/:id/upload', authMiddleware, upload.array('resumes', 100), as
 
   const { data: job, error: jobError } = await supabase
     .from('jobs')
-    .select('id, job_description_text, job_title, assigned_team_id, created_by, status')
+    .select('id, job_description_text, job_title, assigned_team_id, created_by, status, scoring_criteria')
     .eq('id', jobId)
     .single();
 
@@ -324,6 +324,16 @@ router.post('/jobs/:id/upload', authMiddleware, upload.array('resumes', 100), as
   });
 });
 
+// ── Helper: derive score status from job's current scoring_criteria ──────────
+function deriveStatus(score, criteria) {
+  if (score == null) return null;
+  const pass   = criteria?.pass_threshold   ?? 70;
+  const review = criteria?.review_threshold ?? 50;
+  if (score >= pass)   return 'pass';
+  if (score >= review) return 'review';
+  return 'fail';
+}
+
 // GET /api/jobs/:id/candidates — all roles see ALL candidates for the job
 // Optional ?mine=true → restrict to current user's uploads only (used by "My Candidates" page)
 router.get('/jobs/:id/candidates', authMiddleware, async (req, res) => {
@@ -331,9 +341,12 @@ router.get('/jobs/:id/candidates', authMiddleware, async (req, res) => {
   const { status, page = 1, limit = 50, mine } = req.query;
   const { id: userId } = req.user;
 
-  // Verify job exists
-  const { data: job } = await supabase.from('jobs').select('id').eq('id', jobId).single();
+  // Fetch job (including scoring_criteria for dynamic status derivation)
+  const { data: job } = await supabase
+    .from('jobs').select('id, scoring_criteria').eq('id', jobId).single();
   if (!job) return res.status(404).json({ error: 'Job not found' });
+
+  const criteria = job.scoring_criteria || null;
 
   let query = supabase
     .from('candidates')
@@ -350,26 +363,30 @@ router.get('/jobs/:id/candidates', authMiddleware, async (req, res) => {
   if (mine === 'true') {
     query = query.eq('recruiter_id', userId);
   }
-  // All roles see all candidates by default
 
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: 'Failed to fetch candidates' });
 
-  const candidates = (data || []).map(c => ({
-    ...c,
-    score: c.resume_scores?.[0]?.score ?? null,
-    score_status: c.resume_scores?.[0]?.status ?? null,
-    matched_skills: c.resume_scores?.[0]?.matched_skills ?? [],
-    missing_skills: c.resume_scores?.[0]?.missing_skills ?? [],
-    summary: c.resume_scores?.[0]?.summary ?? null,
-    strengths: c.resume_scores?.[0]?.strengths ?? [],
-    weaknesses: c.resume_scores?.[0]?.weaknesses ?? [],
-    experience_match: c.resume_scores?.[0]?.experience_match ?? null,
-    education_match: c.resume_scores?.[0]?.education_match ?? null,
-    recruiter_name: c.recruiter?.name || c.recruiter?.email || null,
-    resume_scores: undefined,
-    recruiter: undefined,
-  }));
+  const candidates = (data || []).map(c => {
+    const rawScore = c.resume_scores?.[0]?.score ?? null;
+    // Always derive status from current job criteria — never trust stale stored status
+    const score_status = rawScore != null ? deriveStatus(rawScore, criteria) : null;
+    return {
+      ...c,
+      score: rawScore,
+      score_status,
+      matched_skills: c.resume_scores?.[0]?.matched_skills ?? [],
+      missing_skills: c.resume_scores?.[0]?.missing_skills ?? [],
+      summary: c.resume_scores?.[0]?.summary ?? null,
+      strengths: c.resume_scores?.[0]?.strengths ?? [],
+      weaknesses: c.resume_scores?.[0]?.weaknesses ?? [],
+      experience_match: c.resume_scores?.[0]?.experience_match ?? null,
+      education_match: c.resume_scores?.[0]?.education_match ?? null,
+      recruiter_name: c.recruiter?.name || c.recruiter?.email || null,
+      resume_scores: undefined,
+      recruiter: undefined,
+    };
+  });
 
   const filtered = status ? candidates.filter(c => c.score_status === status) : candidates;
   res.json({ candidates: filtered, total: filtered.length });
@@ -451,7 +468,7 @@ router.get('/candidates/:id', authMiddleware, async (req, res) => {
 
   let query = supabase
     .from('candidates')
-    .select('*, jobs(id, job_title, company_name), resume_scores(*), recruiter:users!candidates_recruiter_id_fkey(id, name, email)')
+    .select('*, jobs(id, job_title, company_name, scoring_criteria), resume_scores(*), recruiter:users!candidates_recruiter_id_fkey(id, name, email)')
     .eq('id', req.params.id);
 
   // Recruiter can only see their own
@@ -466,11 +483,18 @@ router.get('/candidates/:id', authMiddleware, async (req, res) => {
   const { data: signedUrl } = await supabase.storage
     .from('resumes').createSignedUrl(data.resume_file_path, 3600);
 
+  // Re-derive status from job's current scoring_criteria
+  const criteria = data.jobs?.scoring_criteria || null;
+  const scoreData = data.resume_scores?.[0] ?? null;
+  if (scoreData && scoreData.score != null) {
+    scoreData.status = deriveStatus(scoreData.score, criteria);
+  }
+
   res.json({
     candidate: {
       ...data,
       job: data.jobs,
-      score_data: data.resume_scores?.[0] ?? null,
+      score_data: scoreData,
       resume_download_url: signedUrl?.signedUrl ?? null,
       recruiter_name: data.recruiter?.name || data.recruiter?.email || null,
       jobs: undefined,
