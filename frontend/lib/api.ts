@@ -237,6 +237,8 @@ export const candidatesApi = {
     apiFetch<{ message: string; candidateId: string }>(`/api/candidates/${id}/reprocess`, { method: 'POST' }),
   delete: (id: string) =>
     apiFetch<{ message: string }>(`/api/candidates/${id}`, { method: 'DELETE' }),
+  myCount: () =>
+    apiFetch<{ count: number }>('/api/candidates/my-count'),
 };
 
 // ─── Resume upload ─────────────────────────────────────────────────────────

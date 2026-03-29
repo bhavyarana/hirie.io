@@ -139,6 +139,21 @@ async function getJobSupervisors(jobId, excludeUserId = null) {
   return [...supervisorIds];
 }
 
+// GET /api/candidates/my-count — count of candidates uploaded by the current user
+router.get('/candidates/my-count', authMiddleware, async (req, res) => {
+  const { count, error } = await supabase
+    .from('candidates')
+    .select('*', { count: 'exact', head: true })
+    .eq('recruiter_id', req.user.id);
+
+  if (error) {
+    logger.error('Error fetching my-count:', error);
+    return res.status(500).json({ error: error.message });
+  }
+
+  res.json({ count: count ?? 0 });
+});
+
 // POST /api/jobs/:id/upload — Batch upload resumes
 router.post('/jobs/:id/upload', authMiddleware, upload.array('resumes', 100), async (req, res) => {
 

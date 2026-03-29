@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { jobsApi, teamsApi } from '@/lib/api';
+import { jobsApi, teamsApi, candidatesApi } from '@/lib/api';
 import { useUserContext } from '@/lib/context/UserContext';
 import Link from 'next/link';
 
@@ -171,8 +171,11 @@ function TLDashboard() {
 function RecruiterDashboard() {
   const { user } = useUserContext();
   const { data: jobsData, isLoading } = useQuery({ queryKey: ['jobs'], queryFn: () => jobsApi.list() });
+  const { data: myCountData, isLoading: countLoading } = useQuery({
+    queryKey: ['my-candidates-count'],
+    queryFn: () => candidatesApi.myCount(),
+  });
   const jobs = jobsData?.jobs ?? [];
-  const totalCandidates = jobs.reduce((s, j) => s + (j.candidate_count || 0), 0);
 
   return (
     <>
@@ -185,7 +188,7 @@ function RecruiterDashboard() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '2.5rem' }}>
         <StatCard label="Assigned Jobs" value={jobs.length} icon="💼" color="#38bdf8" isLoading={isLoading} />
-        <StatCard label="My Candidates" value={totalCandidates} icon="👥" color="#a78bfa" isLoading={isLoading} />
+        <StatCard label="My Candidates" value={myCountData?.count ?? 0} icon="👥" color="#a78bfa" isLoading={countLoading} />
         <StatCard label="Active Jobs" value={jobs.filter(j => j.status === 'active').length} icon="✅" color="#22c55e" isLoading={isLoading} />
       </div>
 

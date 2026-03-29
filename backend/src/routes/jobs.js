@@ -279,12 +279,57 @@ router.post('/:id/teams', requireRole('admin', 'manager'), async (req, res) => {
     return res.status(400).json({ error: 'team_ids must be an array' });
   }
 
-  // Delete all current team assignments for this job
-  await supabase.from('job_teams').delete().eq('job_id', req.params.id);
+  const jobId = req.params.id;
+  const newTeamIdSet = new Set(team_ids);
+
+  // ── Step 1: Find teams being REMOVED ─────────────────────────────────────
+  const { data: currentJt } = await supabase
+    .from('job_teams')
+    .select('team_id')
+    .eq('job_id', jobId);
+
+  const removedTeamIds = (currentJt || [])
+    .map(r => r.team_id)
+    .filter(id => !newTeamIdSet.has(id));
+
+  // ── Step 2: Auto-deassign recruiters from removed teams ───────────────────
+  if (removedTeamIds.length > 0) {
+    // Get all members of removed teams
+    const { data: removedMembers } = await supabase
+      .from('team_members')
+      .select('user_id')
+      .in('team_id', removedTeamIds);
+
+    const removedUserIds = (removedMembers || []).map(m => m.user_id);
+
+    if (removedUserIds.length > 0) {
+      // But keep recruiters who are also in a still-assigned team
+      const { data: stillMembers } = team_ids.length > 0
+        ? await supabase
+            .from('team_members')
+            .select('user_id')
+            .in('team_id', team_ids)
+        : { data: [] };
+
+      const stillUserIds = new Set((stillMembers || []).map(m => m.user_id));
+      const toRemove = removedUserIds.filter(uid => !stillUserIds.has(uid));
+
+      if (toRemove.length > 0) {
+        await supabase
+          .from('job_assignments')
+          .delete()
+          .eq('job_id', jobId)
+          .in('recruiter_id', toRemove);
+      }
+    }
+  }
+
+  // ── Step 3: Replace team assignments ─────────────────────────────────────
+  await supabase.from('job_teams').delete().eq('job_id', jobId);
 
   if (team_ids.length === 0) return res.json({ teams: [] });
 
-  const rows = team_ids.map(team_id => ({ job_id: req.params.id, team_id }));
+  const rows = team_ids.map(team_id => ({ job_id: jobId, team_id }));
   const { data, error } = await supabase.from('job_teams').insert(rows).select('team_id, team:teams(id, name)');
 
   if (error) {
@@ -294,7 +339,7 @@ router.post('/:id/teams', requireRole('admin', 'manager'), async (req, res) => {
 
   // Also update the legacy assigned_team_id to the first selected team for backwards compat
   if (team_ids.length > 0) {
-    await supabase.from('jobs').update({ assigned_team_id: team_ids[0] }).eq('id', req.params.id);
+    await supabase.from('jobs').update({ assigned_team_id: team_ids[0] }).eq('id', jobId);
   }
 
   // Notify TL + manager of each team + all admins
@@ -310,7 +355,7 @@ router.post('/:id/teams', requireRole('admin', 'manager'), async (req, res) => {
       notifySet.delete(req.user.id);
       if (notifySet.size > 0) {
         await logActivity(
-          req.user.id, 'job_team_assigned', 'job', req.params.id,
+          req.user.id, 'job_team_assigned', 'job', jobId,
           { team_id }, [...notifySet],
           'Job assigned to your team',
           `A job has been assigned to team "${team.name}".`

@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useDropzone } from 'react-dropzone';
 import { candidatesApi, analyticsApi, uploadResumes, exportCSV, type Candidate, usersApi } from '@/lib/api';
-import { jobsApi, jobAssignmentsApi, type JobAssignment } from '@/lib/api';
+import { jobsApi, jobAssignmentsApi, teamsApi, type JobAssignment } from '@/lib/api';
 import { useUserContext } from '@/lib/context/UserContext';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
@@ -103,7 +103,76 @@ export default function JobDetailPage({ params }: Props) {
 
   const jobAssignments: JobAssignment[] = assignmentsData?.assignments ?? [];
 
+  const canManageAssignments = role === 'admin' || role === 'manager';
+  const canManageRecruiters = role === 'admin' || role === 'manager' || role === 'tl';
+
   const job = jobData?.job;
+  const currentUser = currentUserData?.user;
+
+  // Fetch all teams — needed by admin/manager for team picker (TL's own team resolved below)
+  const { data: allTeamsData } = useQuery({
+    queryKey: ['teams'],
+    queryFn: () => teamsApi.list(),
+    enabled: canManageAssignments,
+  });
+  const allTeams = allTeamsData?.teams ?? [];
+
+  // Fetch members of all teams currently assigned to this job (for ALL roles)
+  // This drives the "Assign recruiter" dropdown — only recruiters from assigned teams are shown.
+  const assignedTeamIds = (job?.teams ?? []).map(t => t.id);
+  const { data: assignedTeamMembers } = useQuery({
+    queryKey: ['assigned-team-members', ...assignedTeamIds],
+    queryFn: async () => {
+      if (assignedTeamIds.length === 0) return [];
+      const results = await Promise.all(assignedTeamIds.map(id => teamsApi.get(id)));
+      return results.flatMap(r => (r as { team: { members: { role_in_team: string; user?: { id: string; name: string | null; email: string } }[] } }).team?.members ?? []);
+    },
+    enabled: canManageRecruiters && assignedTeamIds.length > 0,
+  });
+
+  // Unique recruiters from assigned teams only
+  const recruiterOptions: { id: string; name: string | null; email: string }[] = [];
+  const seen = new Set<string>();
+  for (const m of (assignedTeamMembers ?? [])) {
+    if (m.role_in_team === 'recruiter' && m.user && !seen.has(m.user.id)) {
+      seen.add(m.user.id);
+      recruiterOptions.push(m.user);
+    }
+  }
+
+  const assignedRecruiterIds = new Set(jobAssignments.map(a => a.recruiter_id));
+
+  // ── Assignment mutations ──────────────────────────────────────────────────
+  const setTeamsMutation = useMutation({
+    mutationFn: (teamIds: string[]) => jobsApi.setTeams(jobId, teamIds),
+    onSuccess: () => {
+      toast.success('Teams updated');
+      // Invalidate job (teams list), assignments (may have been auto-removed), and member cache
+      queryClient.invalidateQueries({ queryKey: ['job', jobId] });
+      queryClient.invalidateQueries({ queryKey: ['job-assignments', jobId] });
+      queryClient.invalidateQueries({ queryKey: ['assigned-team-members'] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const assignRecruiterMutation = useMutation({
+    mutationFn: (recruiterId: string) => jobAssignmentsApi.assign(jobId, recruiterId),
+    onSuccess: () => {
+      toast.success('Recruiter assigned');
+      queryClient.invalidateQueries({ queryKey: ['job-assignments', jobId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const removeRecruiterMutation = useMutation({
+    mutationFn: (recruiterId: string) => jobAssignmentsApi.remove(jobId, recruiterId),
+    onSuccess: () => {
+      toast.success('Recruiter removed');
+      queryClient.invalidateQueries({ queryKey: ['job-assignments', jobId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const allCandidates: Candidate[] = candidatesData?.candidates ?? [];
   const analytics = analyticsData;
 
@@ -127,7 +196,6 @@ export default function JobDetailPage({ params }: Props) {
 
   const candidates = allCandidates.filter(c => c.processing_status !== 'rejected');
 
-  const currentUser = currentUserData?.user;
   const isRecruiter = currentUser?.role === 'recruiter';
   const isAssignedRecruiter = isRecruiter
     ? jobAssignments.some(a => a.recruiter_id === currentUser?.id)
@@ -203,7 +271,9 @@ export default function JobDetailPage({ params }: Props) {
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '0.25rem' }}>
             {job?.job_title || '…'}
           </h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>{job?.company_name} • {candidates.length} candidates</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+            {job ? <>{job.company_name} &bull; {candidates.length} candidates</> : `${candidates.length} candidates`}
+          </p>
         </div>
         <button onClick={handleExport} style={{
           padding: '0.625rem 1.25rem', borderRadius: '0.5rem',
@@ -212,44 +282,117 @@ export default function JobDetailPage({ params }: Props) {
         }}>📥 Export CSV</button>
       </div>
 
-      {/* Team & Recruiter info panel */}
-      {job?.teams && job.teams.length > 0 && (
-        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '1.25rem 1.5rem', marginBottom: '1.5rem', display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
-          {/* Assigned Teams */}
-          <div style={{ flex: 1, minWidth: '180px' }}>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.625rem' }}>Assigned Teams</p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
-              {job.teams.map(t => (
-                <span key={t.id} style={{ padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.78rem', background: 'rgba(99,102,241,0.1)', color: '#6366f1', border: '1px solid rgba(99,102,241,0.25)' }}>
-                  🏢 {t.name}
-                </span>
-              ))}
-            </div>
-          </div>
+      {/* Team & Recruiter assignment panel */}
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', padding: '1.25rem 1.5rem', marginBottom: '1.5rem', display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
 
-          <div style={{ width: '1px', background: 'var(--border)', flexShrink: 0 }} />
-
-          {/* Assigned Recruiters */}
-          <div style={{ flex: 1, minWidth: '200px' }}>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.625rem' }}>Assigned Recruiters</p>
-            {jobAssignments.length === 0 ? (
-              <span style={{ color: 'var(--text-faint)', fontSize: '0.8rem' }}>No recruiter assigned yet</span>
-            ) : (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                {jobAssignments.map(a => (
-                  <div key={a.recruiter_id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--bg-input)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '0.5rem', padding: '0.375rem 0.75rem' }}>
-                    <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
-                    <div>
-                      <span style={{ color: 'var(--text-primary)', fontSize: '0.825rem', fontWeight: 500 }}>{a.recruiter?.name || a.recruiter?.email}</span>
-                      {a.recruiter?.name && <span style={{ color: 'var(--text-faint)', fontSize: '0.72rem', display: 'block' }}>{a.recruiter.email}</span>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+        {/* Assigned Teams */}
+        <div style={{ flex: 1, minWidth: '200px' }}>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.625rem' }}>Assigned Teams</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
+            {(job?.teams ?? []).map(t => (
+              <span key={t.id} style={{
+                padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.78rem',
+                background: 'rgba(99,102,241,0.1)', color: '#6366f1', border: '1px solid rgba(99,102,241,0.25)',
+                display: 'flex', alignItems: 'center', gap: '0.35rem',
+              }}>
+                🏢 {t.name}
+                {canManageAssignments && (
+                  <button
+                    onClick={() => {
+                      const newIds = (job?.teams ?? []).filter(x => x.id !== t.id).map(x => x.id);
+                      setTeamsMutation.mutate(newIds);
+                    }}
+                    style={{ background: 'none', border: 'none', color: '#a5b4fc', cursor: 'pointer', fontSize: '0.75rem', lineHeight: 1, padding: '0 0 0 2px' }}
+                    title="Remove team"
+                  >×</button>
+                )}
+              </span>
+            ))}
+            {canManageAssignments && (() => {
+              const assignedTeamIds = new Set((job?.teams ?? []).map(t => t.id));
+              const unassigned = allTeams.filter(t => !assignedTeamIds.has(t.id));
+              if (unassigned.length === 0) return null;
+              return (
+                <select
+                  defaultValue=""
+                  onChange={e => {
+                    if (!e.target.value) return;
+                    const newIds = [...(job?.teams ?? []).map(t => t.id), e.target.value];
+                    setTeamsMutation.mutate(newIds);
+                    e.target.value = '';
+                  }}
+                  style={{
+                    padding: '0.2rem 0.5rem', borderRadius: '999px', fontSize: '0.72rem',
+                    background: 'rgba(99,102,241,0.08)', border: '1px dashed rgba(99,102,241,0.4)',
+                    color: '#6366f1', cursor: 'pointer', outline: 'none',
+                  }}
+                >
+                  <option value="">+ Add team</option>
+                  {unassigned.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              );
+            })()}
           </div>
         </div>
-      )}
+
+        <div style={{ width: '1px', background: 'var(--border)', flexShrink: 0 }} />
+
+        {/* Assigned Recruiters */}
+        <div style={{ flex: 1, minWidth: '220px' }}>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.625rem' }}>Assigned Recruiters</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+            {jobAssignments.length === 0 && (
+              <span style={{ color: 'var(--text-faint)', fontSize: '0.8rem' }}>No recruiter assigned yet</span>
+            )}
+            {jobAssignments.map(a => (
+              <div key={a.recruiter_id} style={{
+                display: 'flex', alignItems: 'center', gap: '0.5rem',
+                background: 'var(--bg-input)', border: '1px solid rgba(34,197,94,0.2)',
+                borderRadius: '0.5rem', padding: '0.375rem 0.75rem',
+              }}>
+                <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <span style={{ color: 'var(--text-primary)', fontSize: '0.825rem', fontWeight: 500 }}>{a.recruiter?.name || a.recruiter?.email}</span>
+                  {a.recruiter?.name && <span style={{ color: 'var(--text-faint)', fontSize: '0.72rem', display: 'block' }}>{a.recruiter.email}</span>}
+                </div>
+                {canManageRecruiters && (
+                  <button
+                    onClick={() => removeRecruiterMutation.mutate(a.recruiter_id)}
+                    title="Remove recruiter"
+                    style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '0.85rem', lineHeight: 1, paddingLeft: '4px' }}
+                  >×</button>
+                )}
+              </div>
+            ))}
+
+            {/* Add recruiter dropdown */}
+            {canManageRecruiters && recruiterOptions.length > 0 && (() => {
+              const unassigned = recruiterOptions.filter(u => !assignedRecruiterIds.has(u.id));
+              if (unassigned.length === 0) return null;
+              return (
+                <select
+                  defaultValue=""
+                  onChange={e => {
+                    if (!e.target.value) return;
+                    assignRecruiterMutation.mutate(e.target.value);
+                    e.target.value = '';
+                  }}
+                  style={{
+                    padding: '0.3rem 0.6rem', borderRadius: '0.5rem', fontSize: '0.72rem',
+                    background: 'rgba(34,197,94,0.08)', border: '1px dashed rgba(34,197,94,0.35)',
+                    color: '#22c55e', cursor: 'pointer', outline: 'none',
+                  }}
+                >
+                  <option value="">+ Assign recruiter</option>
+                  {unassigned.map(u => (
+                    <option key={u.id} value={u.id}>{u.name || u.email}</option>
+                  ))}
+                </select>
+              );
+            })()}
+          </div>
+        </div>
+      </div>
 
       {/* Scoring Criteria card */}
       {(() => {
@@ -289,7 +432,15 @@ export default function JobDetailPage({ params }: Props) {
       })()}
 
       {/* Upload Dropzone */}
-      {!canUpload ? (
+      {!job ? (
+        // Job data still loading — show neutral placeholder, NOT a lock
+        <div style={{
+          border: '2px dashed var(--border)', borderRadius: '1rem', padding: '2rem',
+          textAlign: 'center', background: 'var(--bg-card)', marginBottom: '1.5rem',
+        }}>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Loading…</p>
+        </div>
+      ) : !canUpload ? (
         <div style={{
           border: '2px dashed var(--border)',
           borderRadius: '1rem', padding: '2rem', textAlign: 'center',
