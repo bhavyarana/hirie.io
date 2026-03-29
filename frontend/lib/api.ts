@@ -239,6 +239,11 @@ export const candidatesApi = {
     apiFetch<{ message: string }>(`/api/candidates/${id}`, { method: 'DELETE' }),
   myCount: () =>
     apiFetch<{ count: number }>('/api/candidates/my-count'),
+  overrideScoreStatus: (id: string, score_status: 'pass' | null, score_override_reason?: string) =>
+    apiFetch<{ candidate: Candidate }>(`/api/candidates/${id}/score-override`, {
+      method: 'PATCH',
+      body: JSON.stringify({ score_status, score_override_reason }),
+    }),
 };
 
 // ─── Resume upload ─────────────────────────────────────────────────────────
@@ -478,6 +483,8 @@ export interface Candidate {
   error_message: string | null;
   score: number | null;
   score_status: 'pass' | 'review' | 'fail' | null;
+  score_override_status: 'pass' | null;
+  score_override_reason: string | null;
   matched_skills: string[];
   missing_skills: string[];
   strengths: string[];
@@ -506,6 +513,8 @@ export interface CandidateDetail extends Candidate {
     education_match: number;
     summary: string;
   } | null;
+  score_override_status: 'pass' | null;
+  score_override_reason: string | null;
   resume_download_url: string | null;
 }
 

@@ -76,7 +76,8 @@ export default function CandidateDetailPage({ params }: Props) {
     );
   }
 
-  const statusColor = score?.status === 'pass' ? '#22c55e' : score?.status === 'review' ? '#f59e0b' : '#ef4444';
+  const effectiveStatus = candidate?.score_override_status || score?.status;
+  const statusColor = effectiveStatus === 'pass' ? '#22c55e' : effectiveStatus === 'review' ? '#f59e0b' : '#ef4444';
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1000px' }}>
@@ -161,6 +162,25 @@ export default function CandidateDetailPage({ params }: Props) {
                   <span style={{ fontWeight: 600 }}>📝 Notes: </span>
                   {candidate.hiring_feedback}
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* Score Override banner */}
+          {candidate.score_override_status === 'pass' && (
+            <div style={{
+              marginTop: '0.875rem', padding: '0.7rem 1rem', borderRadius: '0.625rem',
+              background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.3)',
+              display: 'flex', flexDirection: 'column', gap: '0.25rem', maxWidth: '480px',
+            }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, fontSize: '0.8rem', color: '#22c55e' }}>
+                ✅ Manually Overridden to Pass
+              </span>
+              {candidate.score_override_reason && (
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                  <strong style={{ color: 'var(--text-primary)' }}>Reason: </strong>
+                  {candidate.score_override_reason}
+                </span>
               )}
             </div>
           )}

@@ -325,7 +325,9 @@ router.post('/jobs/:id/upload', authMiddleware, upload.array('resumes', 100), as
 });
 
 // ── Helper: derive score status from job's current scoring_criteria ──────────
-function deriveStatus(score, criteria) {
+// If a manual override has been set (score_override_status), use it unconditionally.
+function deriveStatus(score, criteria, overrideStatus = null) {
+  if (overrideStatus) return overrideStatus;
   if (score == null) return null;
   const pass   = criteria?.pass_threshold   ?? 70;
   const review = criteria?.review_threshold ?? 50;
@@ -369,12 +371,13 @@ router.get('/jobs/:id/candidates', authMiddleware, async (req, res) => {
 
   const candidates = (data || []).map(c => {
     const rawScore = c.resume_scores?.[0]?.score ?? null;
-    // Always derive status from current job criteria — never trust stale stored status
-    const score_status = rawScore != null ? deriveStatus(rawScore, criteria) : null;
+    // Derive status: manual override takes precedence over computed threshold
+    const score_status = deriveStatus(rawScore, criteria, c.score_override_status || null);
     return {
       ...c,
       score: rawScore,
       score_status,
+      score_override_status: c.score_override_status || null,
       matched_skills: c.resume_scores?.[0]?.matched_skills ?? [],
       missing_skills: c.resume_scores?.[0]?.missing_skills ?? [],
       summary: c.resume_scores?.[0]?.summary ?? null,
@@ -466,28 +469,42 @@ router.get('/candidates/search', authMiddleware, async (req, res) => {
 router.get('/candidates/:id', authMiddleware, async (req, res) => {
   const { role, id: userId } = req.user;
 
-  let query = supabase
+  const { data, error } = await supabase
     .from('candidates')
     .select('*, jobs(id, job_title, company_name, scoring_criteria), resume_scores(*), recruiter:users!candidates_recruiter_id_fkey(id, name, email)')
-    .eq('id', req.params.id);
-
-  // Recruiter can only see their own
-  if (role === 'recruiter') {
-    query = query.eq('recruiter_id', userId);
-  }
-
-  const { data, error } = await query.single();
+    .eq('id', req.params.id)
+    .single();
 
   if (error || !data) return res.status(404).json({ error: 'Candidate not found' });
+
+  // Access control for recruiters:
+  // A recruiter can view a candidate if they uploaded it OR if they're assigned to the candidate's job
+  if (role === 'recruiter') {
+    const isOwn = data.recruiter_id === userId;
+
+    if (!isOwn) {
+      // Check if recruiter is assigned to the candidate's job
+      const { data: jobAssignment } = await supabase
+        .from('job_recruiter_assignments')
+        .select('job_id')
+        .eq('job_id', data.job_id)
+        .eq('recruiter_id', userId)
+        .maybeSingle();
+
+      if (!jobAssignment) {
+        return res.status(404).json({ error: 'Candidate not found' });
+      }
+    }
+  }
 
   const { data: signedUrl } = await supabase.storage
     .from('resumes').createSignedUrl(data.resume_file_path, 3600);
 
-  // Re-derive status from job's current scoring_criteria
+  // Re-derive status from job's current scoring_criteria (override takes precedence)
   const criteria = data.jobs?.scoring_criteria || null;
   const scoreData = data.resume_scores?.[0] ?? null;
   if (scoreData && scoreData.score != null) {
-    scoreData.status = deriveStatus(scoreData.score, criteria);
+    scoreData.status = deriveStatus(scoreData.score, criteria, data.score_override_status || null);
   }
 
   res.json({
@@ -495,6 +512,8 @@ router.get('/candidates/:id', authMiddleware, async (req, res) => {
       ...data,
       job: data.jobs,
       score_data: scoreData,
+      score_override_status: data.score_override_status || null,
+      score_override_reason: data.score_override_reason || null,
       resume_download_url: signedUrl?.signedUrl ?? null,
       recruiter_name: data.recruiter?.name || data.recruiter?.email || null,
       jobs: undefined,
@@ -620,6 +639,58 @@ router.patch('/candidates/:id/hiring-status', authMiddleware, requireRole('admin
   }
 
   logger.info(`Candidate ${req.params.id} hiring_status updated to ${hiring_status} by ${req.user.id}`);
+  res.json({ candidate: data });
+});
+
+// PATCH /api/candidates/:id/score-override — manually force to 'pass' or cancel override
+// Allowed: admin, manager, tl, recruiter (ownership enforced for recruiter/tl)
+// Body: { score_status: 'pass', score_override_reason: 'reason' } to set
+//       { score_status: null }                                    to cancel
+router.patch('/candidates/:id/score-override', authMiddleware, requireRole('admin', 'manager', 'tl', 'recruiter'), async (req, res) => {
+  const { score_status, score_override_reason } = req.body;
+
+  // Must be 'pass' or null (cancel)
+  if (score_status !== 'pass' && score_status !== null) {
+    return res.status(400).json({ error: 'score_status must be "pass" or null (to cancel)' });
+  }
+
+  // Reason is mandatory when setting pass
+  if (score_status === 'pass' && (!score_override_reason || !score_override_reason.trim())) {
+    return res.status(400).json({ error: 'score_override_reason is required when forcing pass' });
+  }
+
+  // Fetch candidate for ownership check
+  const { data: existing } = await supabase
+    .from('candidates')
+    .select('id, recruiter_id, job_id, score_override_status')
+    .eq('id', req.params.id)
+    .single();
+
+  if (!existing) return res.status(404).json({ error: 'Candidate not found' });
+
+  // Recruiters and TLs can only override candidates they uploaded
+  const { role, id: userId } = req.user;
+  if (role === 'recruiter' || role === 'tl') {
+    if (existing.recruiter_id !== userId) {
+      return res.status(403).json({ error: 'You can only override candidates you uploaded' });
+    }
+  }
+
+  const updates = score_status === 'pass'
+    ? { score_override_status: 'pass', score_override_reason: score_override_reason.trim() }
+    : { score_override_status: null, score_override_reason: null };
+
+  const { data, error } = await supabase
+    .from('candidates')
+    .update(updates)
+    .eq('id', req.params.id)
+    .select()
+    .single();
+
+  if (error || !data) return res.status(500).json({ error: 'Override update failed' });
+
+  const action = score_status === 'pass' ? `overridden to "pass"` : 'override cancelled';
+  logger.info(`Candidate ${req.params.id} score ${action} by ${userId}`);
   res.json({ candidate: data });
 });
 

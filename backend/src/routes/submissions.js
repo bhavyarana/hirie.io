@@ -15,6 +15,9 @@ function applyDateFilter(query, dateFrom, dateTo) {
 
 // ─── Helper: fetch pass-only candidates scoped to role ───────────────────────
 // Returns { candidates, jobIds, recruiterIds } arrays all pass-filtered.
+// Includes both:
+//   1. Candidates whose resume_scores.status = 'pass' (natural pass)
+//   2. Candidates with score_override_status = 'pass' (manually forced pass)
 async function getScopedPassCandidates(user, dateFrom, dateTo) {
   const { role, id: userId } = user;
 
@@ -44,35 +47,62 @@ async function getScopedPassCandidates(user, dateFrom, dateTo) {
   }
   // admin → allowedJobIds remains null (no filter)
 
-  // Step 2: query candidates joined with resume_scores, filter to pass only
-  let query = supabase
+  // ── Step 2a: Natural pass candidates (resume_scores.status = 'pass') ────────
+  let naturalQuery = supabase
     .from('candidates')
     .select(`
-      id, name, email, job_id, recruiter_id, created_at,
+      id, name, email, job_id, recruiter_id, created_at, score_override_status,
       resume_scores!inner(score, status)
     `)
     .eq('processing_status', 'completed')
     .eq('resume_scores.status', 'pass');
 
-  if (allowedJobIds !== null) {
-    query = query.in('job_id', allowedJobIds);
+  if (allowedJobIds !== null) naturalQuery = naturalQuery.in('job_id', allowedJobIds);
+  if (dateFrom) naturalQuery = naturalQuery.gte('created_at', dateFrom);
+  if (dateTo)   naturalQuery = naturalQuery.lte('created_at', dateTo + 'T23:59:59.999Z');
+  naturalQuery = naturalQuery.order('created_at', { ascending: false });
+
+  const { data: naturalData, error: naturalError } = await naturalQuery;
+  if (naturalError) {
+    logger.error('[Submissions] natural pass query error: ' + naturalError.message);
+    throw naturalError;
   }
 
-  if (dateFrom) query = query.gte('created_at', dateFrom);
-  if (dateTo)   query = query.lte('created_at', dateTo + 'T23:59:59.999Z');
+  // ── Step 2b: Manually overridden candidates (score_override_status = 'pass') ─
+  // These may have review/fail in resume_scores but were force-passed by a user.
+  let overrideQuery = supabase
+    .from('candidates')
+    .select(`
+      id, name, email, job_id, recruiter_id, created_at, score_override_status,
+      resume_scores(score, status)
+    `)
+    .eq('processing_status', 'completed')
+    .eq('score_override_status', 'pass');
 
-  query = query.order('created_at', { ascending: false });
+  if (allowedJobIds !== null) overrideQuery = overrideQuery.in('job_id', allowedJobIds);
+  if (dateFrom) overrideQuery = overrideQuery.gte('created_at', dateFrom);
+  if (dateTo)   overrideQuery = overrideQuery.lte('created_at', dateTo + 'T23:59:59.999Z');
+  overrideQuery = overrideQuery.order('created_at', { ascending: false });
 
-  const { data, error } = await query;
-  if (error) {
-    logger.error('[Submissions] getScopedPassCandidates error: ' + error.message);
-    throw error;
+  const { data: overrideData, error: overrideError } = await overrideQuery;
+  if (overrideError) {
+    logger.error('[Submissions] override pass query error: ' + overrideError.message);
+    throw overrideError;
   }
 
-  const candidates = (data || []).map(c => ({
+  // ── Step 2c: Merge, deduplicate by candidate id ────────────────────────────
+  const seen = new Set();
+  const allRaw = [...(naturalData || []), ...(overrideData || [])];
+  const deduplicated = allRaw.filter(c => {
+    if (seen.has(c.id)) return false;
+    seen.add(c.id);
+    return true;
+  }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+  const candidates = deduplicated.map(c => ({
     ...c,
     score: c.resume_scores?.[0]?.score ?? null,
-    score_status: c.resume_scores?.[0]?.status ?? null,
+    score_status: c.score_override_status === 'pass' ? 'pass' : (c.resume_scores?.[0]?.status ?? null),
     resume_scores: undefined,
   }));
 

@@ -548,3 +548,7 @@ CREATE TABLE IF NOT EXISTS public.job_recruiter_assignments (
   assigned_at   TIMESTAMPTZ DEFAULT NOW(),
   PRIMARY KEY (job_id, recruiter_id)
 );
+
+
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS score_override_status text;
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS score_override_reason text;

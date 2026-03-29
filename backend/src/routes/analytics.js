@@ -5,7 +5,8 @@ const authMiddleware = require('../middleware/auth');
 const logger = require('../config/logger');
 
 // ── Helper: compute funnel from rows that have resume_scores joined ──────────
-function deriveStatus(score, criteria) {
+function deriveStatus(score, criteria, overrideStatus = null) {
+  if (overrideStatus) return overrideStatus;
   if (score == null) return null;
   const pass   = criteria?.pass_threshold   ?? 70;
   const review = criteria?.review_threshold ?? 50;
@@ -18,8 +19,12 @@ function enrichAndFunnel(rows, criteria = null) {
   const enriched = (rows || []).map(c => ({
     ...c,
     score: c.resume_scores?.[0]?.score ?? null,
-    // Derive status from current criteria — don't trust stored value
-    score_status: deriveStatus(c.resume_scores?.[0]?.score ?? null, criteria),
+    // Override takes precedence over computed status
+    score_status: deriveStatus(
+      c.resume_scores?.[0]?.score ?? null,
+      criteria,
+      c.score_override_status || null
+    ),
     matched_skills: c.resume_scores?.[0]?.matched_skills ?? [],
   }));
   const completed = enriched.filter(c => c.processing_status === 'completed');
@@ -62,7 +67,7 @@ router.get('/jobs/:id/analytics', authMiddleware, async (req, res) => {
   // Join resume_scores to get score data (same pattern as candidates list endpoint)
   const { data: rows, error } = await supabase
     .from('candidates')
-    .select('id, processing_status, resume_scores(score, status, matched_skills, missing_skills, strengths)')
+    .select('id, processing_status, score_override_status, resume_scores(score, status, matched_skills, missing_skills, strengths)')
     .eq('job_id', jobId)
     .eq('processing_status', 'completed');
 
@@ -71,14 +76,14 @@ router.get('/jobs/:id/analytics', authMiddleware, async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 
-  // Flatten score data — re-derive status from current job criteria
+  // Flatten score data — override takes precedence over computed status
   const scored = (rows || []).map(c => ({
     score: c.resume_scores?.[0]?.score ?? null,
-    score_status: deriveStatus(c.resume_scores?.[0]?.score ?? null, criteria),
+    score_status: deriveStatus(c.resume_scores?.[0]?.score ?? null, criteria, c.score_override_status || null),
     matched_skills: c.resume_scores?.[0]?.matched_skills ?? [],
     missing_skills: c.resume_scores?.[0]?.missing_skills ?? [],
     strengths: c.resume_scores?.[0]?.strengths ?? [],
-  })).filter(c => c.score !== null);
+  })).filter(c => c.score !== null || c.score_status === 'pass'); // include override-passed even if no raw score
 
   if (!scored.length) {
     return res.json({
@@ -140,7 +145,7 @@ async function adminAnalytics() {
   const [{ data: allTeams }, { data: allJobs }, { data: allCandidates }, { data: allUsers }] = await Promise.all([
     supabase.from('teams').select('id, name, manager_id, tl_id, manager:users!teams_manager_id_fkey(id,name,email), tl:users!teams_tl_id_fkey(id,name,email)'),
     supabase.from('jobs').select('id, job_title, company_name, status, created_by, created_at'),
-    supabase.from('candidates').select('id, job_id, recruiter_id, processing_status, created_at, resume_scores(score, status)'),
+    supabase.from('candidates').select('id, job_id, recruiter_id, processing_status, created_at, score_override_status, resume_scores(score, status)'),
     supabase.from('users').select('id, name, email, role'),
   ]);
 
@@ -185,7 +190,7 @@ async function managerAnalytics(userId) {
   const jobIds = jobs.map(j => j.id);
 
   const { data: rawCands } = jobIds.length
-    ? await supabase.from('candidates').select('id, job_id, recruiter_id, processing_status, created_at, resume_scores(score, status)').in('job_id', jobIds)
+    ? await supabase.from('candidates').select('id, job_id, recruiter_id, processing_status, created_at, score_override_status, resume_scores(score, status)').in('job_id', jobIds)
     : { data: [] };
 
   const { enriched, pass, review, fail, avg_score, pass_rate, completed } = enrichAndFunnel(rawCands);
@@ -228,7 +233,7 @@ async function tlAnalytics(userId) {
 
   const [{ data: jobs }, { data: rawCands }, { data: members }] = await Promise.all([
     supabase.from('jobs').select('id, job_title, status').in('id', jobIds),
-    supabase.from('candidates').select('id, job_id, recruiter_id, processing_status, name, resume_file_name, created_at, resume_scores(score, status)').in('job_id', jobIds),
+    supabase.from('candidates').select('id, job_id, recruiter_id, processing_status, name, resume_file_name, created_at, score_override_status, resume_scores(score, status)').in('job_id', jobIds),
     supabase.from('team_members').select('user_id, users!team_members_user_id_fkey(id,name,email)').in('team_id', teamIds),
   ]);
 
@@ -270,7 +275,7 @@ async function tlAnalytics(userId) {
 // ═══════════════════════════════════════════════════════════════════════════
 async function recruiterAnalytics(userId) {
   const { data: rawCands } = await supabase.from('candidates')
-    .select('id, job_id, processing_status, name, resume_file_name, created_at, resume_scores(score, status, matched_skills), jobs!candidates_job_id_fkey(id, job_title, company_name)')
+    .select('id, job_id, processing_status, name, resume_file_name, created_at, score_override_status, resume_scores(score, status, matched_skills), jobs!candidates_job_id_fkey(id, job_title, company_name)')
     .eq('recruiter_id', userId).order('created_at', { ascending: false });
 
   const { enriched, pass, review, fail, avg_score, pass_rate, completed } = enrichAndFunnel(rawCands);

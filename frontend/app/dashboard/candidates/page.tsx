@@ -189,13 +189,17 @@ function HiringStatusEditor({ c, onSave }: {
 
 // ─── Candidate Card ───────────────────────────────────────────────────────────
 
-function CandidateCard({ c, canUpdateHiring, onHiringChange }: {
+function CandidateCard({ c, canUpdateHiring, onHiringChange, onForcePass, onCancelOverride }: {
   c: Candidate;
   canUpdateHiring: boolean;
   onHiringChange: (id: string, hiring_status: string, rejection_reason?: string, hiring_feedback?: string) => void;
+  onForcePass: (id: string, reason: string) => void;
+  onCancelOverride: (id: string) => void;
 }) {
   const initials = ((c.name || c.email || c.resume_file_name || '?').slice(0, 2)).toUpperCase();
   const topSkills = (c.matched_skills || []).slice(0, 4);
+  const [showReasonBox, setShowReasonBox] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('');
 
   return (
     <div
@@ -268,7 +272,7 @@ function CandidateCard({ c, canUpdateHiring, onHiringChange }: {
         </div>
       </div>
 
-      {/* Actions: View Profile */}
+      {/* Actions: View Profile + Force Pass / Cancel Override */}
       <div style={{ display: 'flex', gap: '0.5rem' }}>
         <Link
           href={`/dashboard/candidates/${c.id}`}
@@ -276,7 +280,99 @@ function CandidateCard({ c, canUpdateHiring, onHiringChange }: {
         >
           View Profile →
         </Link>
+
+        {/* Already overridden — show badge + Cancel button */}
+        {c.score_override_status === 'pass' && (
+          <button
+            onClick={() => onCancelOverride(c.id)}
+            title="Remove the manual pass override"
+            style={{
+              padding: '0.4rem 0.75rem', borderRadius: '0.5rem',
+              background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)',
+              color: '#ef4444', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            ❌ Cancel Override
+          </button>
+        )}
+
+        {/* Not yet overridden: show Force Pass toggle */}
+        {c.processing_status === 'completed' &&
+          (c.score_status === 'review' || c.score_status === 'fail') &&
+          !c.score_override_status && (
+          <button
+            onClick={() => { setShowReasonBox(v => !v); setOverrideReason(''); }}
+            title="Manually mark as Pass"
+            style={{
+              padding: '0.4rem 0.75rem', borderRadius: '0.5rem',
+              background: showReasonBox ? 'rgba(100,116,139,0.1)' : 'rgba(34,197,94,0.1)',
+              border: `1px solid ${showReasonBox ? 'rgba(100,116,139,0.3)' : 'rgba(34,197,94,0.3)'}`,
+              color: showReasonBox ? '#64748b' : '#22c55e',
+              fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+            }}
+          >
+            {showReasonBox ? '✕ Cancel' : '✅ Force Pass'}
+          </button>
+        )}
       </div>
+
+      {/* Inline reason input — shown when Force Pass toggled */}
+      {showReasonBox && !c.score_override_status && (
+        <div style={{
+          borderTop: '1px solid var(--border)', paddingTop: '0.75rem',
+          display: 'flex', flexDirection: 'column', gap: '0.5rem',
+        }}>
+          <label style={{ color: 'var(--text-faint)', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Override Reason <span style={{ color: '#ef4444' }}>*</span>
+          </label>
+          <textarea
+            value={overrideReason}
+            onChange={e => setOverrideReason(e.target.value)}
+            placeholder="Why is this candidate being manually passed? (required)"
+            rows={2}
+            style={{
+              background: 'var(--bg-input)', border: `1px solid ${overrideReason.trim() ? 'rgba(34,197,94,0.4)' : 'var(--border)'}`,
+              borderRadius: '0.5rem', padding: '0.4rem 0.6rem',
+              color: 'var(--text-secondary)', fontSize: '0.75rem',
+              outline: 'none', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5,
+              transition: 'border-color 0.15s',
+            }}
+          />
+          <button
+            disabled={!overrideReason.trim()}
+            onClick={() => {
+              if (!overrideReason.trim()) return;
+              onForcePass(c.id, overrideReason.trim());
+              setShowReasonBox(false);
+              setOverrideReason('');
+            }}
+            style={{
+              padding: '0.4rem 1rem', borderRadius: '0.5rem', alignSelf: 'flex-end',
+              background: overrideReason.trim() ? 'rgba(34,197,94,0.12)' : 'var(--bg-input)',
+              border: `1px solid ${overrideReason.trim() ? 'rgba(34,197,94,0.4)' : 'var(--border)'}`,
+              color: overrideReason.trim() ? '#22c55e' : 'var(--text-faint)',
+              fontSize: '0.75rem', fontWeight: 600,
+              cursor: overrideReason.trim() ? 'pointer' : 'not-allowed',
+              transition: 'all 0.15s',
+            }}
+          >
+            Confirm Pass →
+          </button>
+        </div>
+      )}
+
+      {/* Show stored override reason on card */}
+      {c.score_override_status === 'pass' && c.score_override_reason && (
+        <div style={{
+          padding: '0.5rem 0.75rem', borderRadius: '0.5rem',
+          background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)',
+          fontSize: '0.72rem', color: 'var(--text-secondary)', lineHeight: 1.5,
+        }}>
+          <span style={{ fontWeight: 600, color: '#22c55e' }}>★ Override reason: </span>
+          {c.score_override_reason}
+        </div>
+      )}
 
       {/* Hiring Status editor (recruiter + TL) */}
       {canUpdateHiring && (
@@ -314,6 +410,25 @@ export default function CandidatesPage() {
       candidatesApi.updateHiringStatus(id, hiring_status, rejection_reason, hiring_feedback),
     onSuccess: (_, vars) => {
       toast.success(`Hiring status set to "${HIRING_STATUSES.find(h => h.value === vars.hiring_status)?.label}"`);
+      queryClient.invalidateQueries({ queryKey: ['my-candidates', selectedJobId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const forcePassMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      candidatesApi.overrideScoreStatus(id, 'pass', reason),
+    onSuccess: () => {
+      toast.success('✅ Candidate manually marked as Pass');
+      queryClient.invalidateQueries({ queryKey: ['my-candidates', selectedJobId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const cancelOverrideMutation = useMutation({
+    mutationFn: (id: string) => candidatesApi.overrideScoreStatus(id, null),
+    onSuccess: () => {
+      toast.success('Override cancelled — score restored');
       queryClient.invalidateQueries({ queryKey: ['my-candidates', selectedJobId] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -418,6 +533,8 @@ export default function CandidatesPage() {
                 onHiringChange={(id, hiring_status, rejection_reason, hiring_feedback) =>
                   hiringMutation.mutate({ id, hiring_status, rejection_reason, hiring_feedback })
                 }
+                onForcePass={(id, reason) => forcePassMutation.mutate({ id, reason })}
+                onCancelOverride={(id) => cancelOverrideMutation.mutate(id)}
               />
             ))}
           </div>

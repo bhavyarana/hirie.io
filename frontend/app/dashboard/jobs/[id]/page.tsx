@@ -258,6 +258,15 @@ export default function JobDetailPage({ params }: Props) {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const forcePassMutation = useMutation({
+    mutationFn: (id: string) => candidatesApi.overrideScoreStatus(id, 'pass'),
+    onSuccess: () => {
+      toast.success('✅ Candidate manually marked as Pass');
+      queryClient.invalidateQueries({ queryKey: ['candidates', jobId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   function handleExport() {
     exportCSV(jobId, job?.job_title || 'job').catch(err => toast.error(err.message));
   }
@@ -663,12 +672,15 @@ export default function JobDetailPage({ params }: Props) {
                         </td>
                         <td style={{ padding: '1rem 1.25rem' }}>
                           {c.score !== null ? (
-                            <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                               <span style={{
                                 fontSize: '1.125rem', fontWeight: 700,
                                 color: c.score_status === 'pass' ? '#22c55e' : c.score_status === 'review' ? '#f59e0b' : '#ef4444',
                               }}>{Math.round(c.score)}</span>
                               <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>/100</span>
+                              {c.score_override_status && (
+                                <span title="Manually overridden to Pass" style={{ fontSize: '0.65rem', padding: '0.1rem 0.35rem', borderRadius: '999px', background: 'rgba(34,197,94,0.15)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)', fontWeight: 600 }}>★ Override</span>
+                              )}
                             </div>
                           ) : <span style={{ color: 'var(--text-faint)', fontSize: '0.8rem' }}>—</span>}
                         </td>
