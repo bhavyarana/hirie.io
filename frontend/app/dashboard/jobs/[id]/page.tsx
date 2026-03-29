@@ -408,7 +408,7 @@ export default function JobDetailPage({ params }: Props) {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: 'var(--table-header-bg)' }}>
-                      {['Name / Contact', 'Score', 'Status', 'Hiring Status', 'Recruiter', 'Processing', 'Action'].map(h => (
+                      {['Name / Contact', 'Score', 'Hiring Status', 'Recruiter', 'Processing', 'Action'].map(h => (
                         <th key={h} style={{ padding: '0.75rem 1.25rem', textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -441,9 +441,6 @@ export default function JobDetailPage({ params }: Props) {
                               <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>/100</span>
                             </div>
                           ) : <span style={{ color: 'var(--text-faint)', fontSize: '0.8rem' }}>—</span>}
-                        </td>
-                        <td style={{ padding: '1rem 1.25rem' }}>
-                          {c.score_status ? <StatusBadge status={c.score_status} /> : <span style={{ color: 'var(--text-faint)', fontSize: '0.75rem' }}>—</span>}
                         </td>
                         <td style={{ padding: '1rem 1.25rem' }}>
                           <HiringStatusBadge status={c.hiring_status} />

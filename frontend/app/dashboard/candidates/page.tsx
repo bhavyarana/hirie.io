@@ -17,12 +17,6 @@ const SCORE_FILTERS = [
   { label: 'Pending ⏳', value: 'pending', color: '#64748b' },
 ];
 
-const PIPELINE_STATUSES = ['uploaded', 'scored', 'shortlisted', 'interview', 'rejected'] as const;
-
-const PIPELINE_COLORS: Record<string, string> = {
-  uploaded: '#64748b', scored: '#6366f1', shortlisted: '#22c55e',
-  interview: '#f59e0b', rejected: '#ef4444',
-};
 
 export const HIRING_STATUSES = [
   { value: 'client_screening', label: 'Client Screening', color: '#6366f1' },
@@ -69,14 +63,6 @@ function HiringBadge({ status }: { status: string | null }) {
   );
 }
 
-function PipelineBadge({ status }: { status: string }) {
-  const color = PIPELINE_COLORS[status] || '#64748b';
-  return (
-    <span style={{ padding: '0.18rem 0.55rem', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 600, background: `${color}18`, color, border: `1px solid ${color}40` }}>
-      {status}
-    </span>
-  );
-}
 
 function SkillChip({ label }: { label: string }) {
   return (
@@ -170,11 +156,9 @@ function HiringStatusEditor({ c, onSave }: {
 
 // ─── Candidate Card ───────────────────────────────────────────────────────────
 
-function CandidateCard({ c, canUpdatePipeline, canUpdateHiring, onPipelineChange, onHiringChange }: {
+function CandidateCard({ c, canUpdateHiring, onHiringChange }: {
   c: Candidate;
-  canUpdatePipeline: boolean;
   canUpdateHiring: boolean;
-  onPipelineChange: (id: string, status: string) => void;
   onHiringChange: (id: string, hiring_status: string, rejection_reason?: string, hiring_feedback?: string) => void;
 }) {
   const initials = ((c.name || c.email || c.resume_file_name || '?').slice(0, 2)).toUpperCase();
@@ -242,17 +226,16 @@ function CandidateCard({ c, canUpdatePipeline, canUpdateHiring, onPipelineChange
         </p>
       )}
 
-      {/* Pipeline + Recruiter + Date row */}
+      {/* Hiring Status + Recruiter + Date row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
-        <PipelineBadge status={c.status} />
-        {c.hiring_status && <HiringBadge status={c.hiring_status} />}
+        <HiringBadge status={c.hiring_status} />
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
           {c.recruiter_name && <span style={{ color: 'var(--text-faint)', fontSize: '0.68rem' }}>👤 {c.recruiter_name}</span>}
           <span style={{ color: 'var(--text-faint)', fontSize: '0.68rem' }}>🗓 {new Date(c.created_at).toLocaleDateString()}</span>
         </div>
       </div>
 
-      {/* Actions: View Profile + Pipeline dropdown */}
+      {/* Actions: View Profile */}
       <div style={{ display: 'flex', gap: '0.5rem' }}>
         <Link
           href={`/dashboard/candidates/${c.id}`}
@@ -260,17 +243,6 @@ function CandidateCard({ c, canUpdatePipeline, canUpdateHiring, onPipelineChange
         >
           View Profile →
         </Link>
-        {canUpdatePipeline && (
-          <select
-            value={c.status}
-            onChange={e => onPipelineChange(c.id, e.target.value)}
-            style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.3rem 0.5rem', color: 'var(--text-secondary)', fontSize: '0.72rem', cursor: 'pointer' }}
-          >
-            {PIPELINE_STATUSES.map(s => (
-              <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-            ))}
-          </select>
-        )}
       </div>
 
       {/* Hiring Status editor (recruiter + TL) */}
@@ -289,7 +261,6 @@ export default function CandidatesPage() {
   const [scoreFilter, setScoreFilter] = useState('');
   const queryClient = useQueryClient();
 
-  const canUpdatePipeline = role === 'admin' || role === 'manager' || role === 'tl';
   const canUpdateHiring = role === 'recruiter' || role === 'tl' || role === 'manager' || role === 'admin';
 
   const { data: jobsData } = useQuery({ queryKey: ['jobs'], queryFn: () => jobsApi.list() });
@@ -305,15 +276,6 @@ export default function CandidatesPage() {
   });
   const candidates = data?.candidates ?? [];
 
-  const pipelineMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) => candidatesApi.updateStatus(id, status),
-    onSuccess: () => {
-      toast.success('Pipeline status updated');
-      queryClient.invalidateQueries({ queryKey: ['my-candidates', selectedJobId] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
   const hiringMutation = useMutation({
     mutationFn: ({ id, hiring_status, rejection_reason, hiring_feedback }: { id: string; hiring_status: string; rejection_reason?: string; hiring_feedback?: string }) =>
       candidatesApi.updateHiringStatus(id, hiring_status, rejection_reason, hiring_feedback),
@@ -323,6 +285,7 @@ export default function CandidatesPage() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1300px' }}>
@@ -400,9 +363,7 @@ export default function CandidatesPage() {
               <CandidateCard
                 key={c.id}
                 c={c}
-                canUpdatePipeline={canUpdatePipeline}
                 canUpdateHiring={canUpdateHiring}
-                onPipelineChange={(id, status) => pipelineMutation.mutate({ id, status })}
                 onHiringChange={(id, hiring_status, rejection_reason, hiring_feedback) =>
                   hiringMutation.mutate({ id, hiring_status, rejection_reason, hiring_feedback })
                 }
