@@ -147,12 +147,20 @@ router.post('/jobs/:id/upload', authMiddleware, upload.array('resumes', 100), as
 
   const { data: job, error: jobError } = await supabase
     .from('jobs')
-    .select('id, job_description_text, job_title, assigned_team_id, created_by')
+    .select('id, job_description_text, job_title, assigned_team_id, created_by, status')
     .eq('id', jobId)
     .single();
 
   if (jobError || !job) {
     return res.status(404).json({ error: 'Job not found' });
+  }
+
+  // Block uploads to non-active jobs for recruiters & TLs
+  const { role: userRole } = req.user;
+  if (job.status !== 'active' && userRole !== 'admin' && userRole !== 'manager') {
+    return res.status(403).json({
+      error: `This job is ${job.status}. Resume uploads are disabled for ${job.status} jobs.`,
+    });
   }
 
   // Check upload permission

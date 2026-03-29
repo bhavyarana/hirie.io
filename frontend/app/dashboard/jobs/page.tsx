@@ -17,7 +17,7 @@ export default function JobsListPage() {
   const canManage = role === 'admin' || role === 'manager';
 
   const [search, setSearch] = useState('');
-  const [status, setStatus] = useState<'all' | 'active' | 'closed' | 'draft'>('all');
+  const [status, setStatus] = useState<'all' | 'active' | 'closed' | 'draft'>('active');
   const [sort, setSort] = useState<SortOption>('newest');
 
   const { data, isLoading } = useQuery({ queryKey: ['jobs'], queryFn: () => jobsApi.list() });
@@ -55,8 +55,8 @@ export default function JobsListPage() {
     if (confirm(`Delete job "${job.job_title}"? This will also delete all associated candidates.`)) deleteMutation.mutate(job.id);
   };
   const handleEdit = (e: React.MouseEvent, jobId: string) => { e.preventDefault(); e.stopPropagation(); router.push(`/dashboard/jobs/${jobId}/edit`); };
-  const clearFilters = () => { setSearch(''); setStatus('all'); setSort('newest'); };
-  const hasActiveFilters = search || status !== 'all' || sort !== 'newest';
+  const clearFilters = () => { setSearch(''); setStatus('active'); setSort('newest'); };
+  const hasActiveFilters = search || status !== 'active' || sort !== 'newest';
 
   const tabStyle = (active: boolean, color = '#6366f1') => ({
     padding: '0.375rem 0.875rem', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 600,
@@ -176,7 +176,15 @@ function JobCard({ job, canManage, searchQuery = '', onEdit, onDelete }: { job: 
   return (
     <div style={{ position: 'relative' }} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
       <Link href={`/dashboard/jobs/${job.id}`} style={{ textDecoration: 'none', display: 'block' }}>
-        <div style={{ background: 'var(--bg-card)', border: `1px solid ${hovered ? 'rgba(99,102,241,0.4)' : 'var(--border)'}`, borderRadius: '1rem', padding: '1.5rem', transition: 'all 0.2s ease', cursor: 'pointer', transform: hovered ? 'translateY(-2px)' : 'translateY(0)', boxShadow: hovered ? '0 8px 30px rgba(99,102,241,0.15)' : 'none' }}>
+        <div style={{
+          background: 'var(--bg-card)',
+          border: `1px solid ${hovered && job.status === 'active' ? 'rgba(99,102,241,0.4)' : 'var(--border)'}`,
+          borderRadius: '1rem', padding: '1.5rem', transition: 'all 0.2s ease', cursor: 'pointer',
+          transform: hovered && job.status === 'active' ? 'translateY(-2px)' : 'translateY(0)',
+          boxShadow: hovered && job.status === 'active' ? '0 8px 30px rgba(99,102,241,0.15)' : 'none',
+          opacity: job.status === 'active' ? 1 : 0.55,
+          filter: job.status === 'active' ? 'none' : 'grayscale(0.4)',
+        }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <h3 style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '1rem', marginBottom: '0.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

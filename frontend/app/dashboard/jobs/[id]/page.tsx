@@ -132,7 +132,8 @@ export default function JobDetailPage({ params }: Props) {
   const isAssignedRecruiter = isRecruiter
     ? jobAssignments.some(a => a.recruiter_id === currentUser?.id)
     : true;
-  const canUpload = !isRecruiter || isAssignedRecruiter;
+  const jobIsOpen = job?.status === 'active';
+  const canUpload = jobIsOpen && (!isRecruiter || isAssignedRecruiter);
 
   const filtered = candidates.filter(c => {
     if (statusFilter !== 'all' && c.score_status !== statusFilter && c.processing_status !== statusFilter) return false;
@@ -296,9 +297,11 @@ export default function JobDetailPage({ params }: Props) {
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem',
         }}>
           <div style={{ fontSize: '2rem' }}>🔒</div>
-          <p style={{ color: 'var(--text-secondary)', fontWeight: 600, margin: 0 }}>Upload not available</p>
+          <p style={{ color: 'var(--text-secondary)', fontWeight: 600, margin: 0 }}>Uploads locked</p>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.825rem', margin: 0 }}>
-            You are not assigned to this job. Contact your Team Lead to get access.
+            {!jobIsOpen
+              ? `This job is ${job?.status || 'closed'} — resume uploads are disabled.`
+              : 'You are not assigned to this job. Contact your Team Lead to get access.'}
           </p>
         </div>
       ) : (
