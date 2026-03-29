@@ -275,11 +275,41 @@ export default function JobDetailPage({ params }: Props) {
             {job ? <>{job.company_name} &bull; {candidates.length} candidates</> : `${candidates.length} candidates`}
           </p>
         </div>
-        <button onClick={handleExport} style={{
-          padding: '0.625rem 1.25rem', borderRadius: '0.5rem',
-          background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
-          cursor: 'pointer', fontSize: '0.875rem',
-        }}>📥 Export CSV</button>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {(role === 'admin' || role === 'manager') && (
+            <Link
+              href={`/dashboard/jobs/${jobId}/edit`}
+              title="Edit job"
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: '38px', height: '38px', borderRadius: '0.5rem',
+                background: 'var(--bg-card)', border: '1px solid var(--border)',
+                color: 'var(--text-muted)', textDecoration: 'none', fontSize: '1rem',
+                transition: 'all 0.15s',
+                flexShrink: 0,
+              }}
+              onMouseEnter={e => {
+                const el = e.currentTarget as HTMLAnchorElement;
+                el.style.background = 'rgba(99,102,241,0.1)';
+                el.style.borderColor = 'rgba(99,102,241,0.4)';
+                el.style.color = '#6366f1';
+              }}
+              onMouseLeave={e => {
+                const el = e.currentTarget as HTMLAnchorElement;
+                el.style.background = 'var(--bg-card)';
+                el.style.borderColor = 'var(--border)';
+                el.style.color = 'var(--text-muted)';
+              }}
+            >
+              ✏️
+            </Link>
+          )}
+          <button onClick={handleExport} style={{
+            padding: '0.625rem 1.25rem', borderRadius: '0.5rem',
+            background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
+            cursor: 'pointer', fontSize: '0.875rem',
+          }}>📥 Export CSV</button>
+        </div>
       </div>
 
       {/* Team & Recruiter assignment panel */}
