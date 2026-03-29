@@ -17,9 +17,21 @@ router.get('/', async (req, res) => {
     .from('job_recruiter_assignments')
     .select('*, job:jobs(id, job_title, company_name, status), recruiter:users!job_recruiter_assignments_recruiter_id_fkey(id, name, email)');
 
-  // TL can only see assignments they made, admin/manager/recruiter see all
+  // TL: scope to jobs that belong to their teams (not just assignments they made)
   if (role === 'tl') {
-    query = query.eq('assigned_by', userId);
+    const { data: myTeams } = await supabase.from('teams').select('id').eq('tl_id', userId);
+    const teamIds = (myTeams || []).map(t => t.id);
+    if (teamIds.length) {
+      const { data: jtRows } = await supabase.from('job_teams').select('job_id').in('team_id', teamIds);
+      const tlJobIds = (jtRows || []).map(r => r.job_id);
+      if (tlJobIds.length) {
+        query = query.in('job_id', tlJobIds);
+      } else {
+        return res.json({ assignments: [] });
+      }
+    } else {
+      return res.json({ assignments: [] });
+    }
   }
 
   if (recruiter_id) query = query.eq('recruiter_id', recruiter_id);
