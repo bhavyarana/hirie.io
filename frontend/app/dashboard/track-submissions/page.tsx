@@ -466,12 +466,10 @@ export default function TrackSubmissionsPage() {
   const { role } = useUserContext();
   const [tab, setTab] = useState<Tab>('recruiter');
 
-  // Default: last 30 days
-  const today = new Date();
-  const defaultTo = today.toISOString().slice(0, 10);
-  const defaultFrom = new Date(today.setDate(today.getDate() - 30)).toISOString().slice(0, 10);
-  const [dateFrom, setDateFrom] = useState(defaultFrom);
-  const [dateTo, setDateTo] = useState(defaultTo);
+  // Default: today
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [dateFrom, setDateFrom] = useState(todayStr);
+  const [dateTo, setDateTo] = useState(todayStr);
 
   const handleDateChange = useCallback((from: string, to: string) => {
     setDateFrom(from);
