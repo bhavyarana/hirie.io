@@ -271,11 +271,35 @@ export async function uploadResumes(jobId: string, files: File[], onProgress?: (
   });
 }
 
-// ─── Analytics ──────────────────────────────────────────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const analyticsApi = {
   get: (jobId: string) => apiFetch<AnalyticsData>(`/api/jobs/${jobId}/analytics`),
   dashboard: () => apiFetch<Record<string, any>>('/api/analytics/dashboard'),
+};
+
+// ─── Submissions ─────────────────────────────────────────────────────────────
+function submissionsQs(params?: { dateFrom?: string; dateTo?: string }): string {
+  const q = new URLSearchParams();
+  if (params?.dateFrom) q.set('date_from', params.dateFrom);
+  if (params?.dateTo)   q.set('date_to', params.dateTo);
+  return q.toString() ? `?${q.toString()}` : '';
+}
+
+export const submissionsApi = {
+  summary: (params?: { dateFrom?: string; dateTo?: string }) =>
+    apiFetch<SubmissionSummary>(`/api/submissions/summary${submissionsQs(params)}`),
+  byRecruiter: (params?: { dateFrom?: string; dateTo?: string }) =>
+    apiFetch<{ recruiters: SubmissionRecruiter[] }>(`/api/submissions/by-recruiter${submissionsQs(params)}`),
+  recruiterDetail: (id: string, params?: { dateFrom?: string; dateTo?: string }) =>
+    apiFetch<SubmissionRecruiterDetail>(`/api/submissions/by-recruiter/${id}${submissionsQs(params)}`),
+  byTeam: (params?: { dateFrom?: string; dateTo?: string }) =>
+    apiFetch<{ teams: SubmissionTeam[] }>(`/api/submissions/by-team${submissionsQs(params)}`),
+  teamDetail: (id: string, params?: { dateFrom?: string; dateTo?: string }) =>
+    apiFetch<SubmissionTeamDetail>(`/api/submissions/by-team/${id}${submissionsQs(params)}`),
+  byJob: (params?: { dateFrom?: string; dateTo?: string }) =>
+    apiFetch<{ jobs: SubmissionJob[] }>(`/api/submissions/by-job${submissionsQs(params)}`),
+  jobDetail: (id: string, params?: { dateFrom?: string; dateTo?: string }) =>
+    apiFetch<SubmissionJobDetail>(`/api/submissions/by-job/${id}${submissionsQs(params)}`),
 };
 
 // ─── Parse JD ───────────────────────────────────────────────────────────────
@@ -568,4 +592,76 @@ export interface Notification {
   entity_id: string | null;
   is_read: boolean;
   created_at: string;
+}
+
+// ─── Submissions Types ───────────────────────────────────────────────────────
+
+export interface SubmissionTimeline {
+  date: string;
+  count: number;
+}
+
+export interface SubmissionSummary {
+  total_submissions: number;
+  total_jobs: number;
+  total_recruiters: number;
+  avg_score: number;
+  top_recruiter: { id: string; name: string; count: number } | null;
+  timeline: SubmissionTimeline[];
+}
+
+export interface SubmissionRecruiter {
+  id: string;
+  name: string;
+  email: string | null;
+  role: string | null;
+  submission_count: number;
+  job_count: number;
+  avg_score: number;
+}
+
+export interface SubmissionRecruiterDetail {
+  recruiter: { id: string; name: string; email: string | null; role: string | null };
+  kpis: { total_submissions: number; jobs_count: number; avg_score: number };
+  jobs: { id: string; title: string; company: string; status: string; submission_count: number }[];
+  candidates: { id: string; name: string; email: string | null; score: number | null; score_status: string | null; job_id: string; job_title: string; submitted_at: string }[];
+  timeline: SubmissionTimeline[];
+}
+
+export interface SubmissionTeam {
+  id: string;
+  name: string;
+  manager: string;
+  tl: string;
+  member_count: number;
+  submission_count: number;
+  job_count: number;
+  avg_score: number;
+}
+
+export interface SubmissionTeamDetail {
+  team: { id: string; name: string; manager: string; tl: string };
+  kpis: { total_submissions: number; job_count: number; member_count: number; avg_score: number };
+  jobs: { id: string; title: string; company: string; status: string; submission_count: number }[];
+  members: { id: string; name: string; email: string | null; role: string; submission_count: number }[];
+  candidates: { id: string; name: string; email: string | null; score: number | null; job_id: string; job_title: string; recruiter_name: string; submitted_at: string }[];
+  timeline: SubmissionTimeline[];
+}
+
+export interface SubmissionJob {
+  id: string;
+  title: string;
+  company: string;
+  status: string;
+  submission_count: number;
+  recruiter_count: number;
+  avg_score: number;
+}
+
+export interface SubmissionJobDetail {
+  job: { id: string; title: string; company: string; status: string; created_at: string };
+  kpis: { total_submissions: number; recruiter_count: number; avg_score: number };
+  recruiters: { id: string; name: string; email: string | null; submission_count: number; avg_score: number }[];
+  candidates: { id: string; name: string; email: string | null; score: number | null; recruiter_name: string; submitted_at: string }[];
+  timeline: SubmissionTimeline[];
 }
