@@ -63,7 +63,6 @@ async function canUploadToJob(user, job) {
 
   if (role === 'recruiter') {
     // Recruiter must be explicitly assigned to this job via job_recruiter_assignments
-    // (Being a team member alone is insufficient — a TL/admin must have directly assigned them)
     const { data: assignment } = await supabase
       .from('job_recruiter_assignments')
       .select('recruiter_id')
@@ -113,8 +112,36 @@ async function upsertTalentPool(candidateId, file, resumeHash, storagePath, recr
   }
 }
 
+/**
+ * Returns the set of supervisor user IDs who should receive notifications
+ * about activity on a job: TL of each assigned team, team managers, and all admins.
+ * Excludes the acting user (excludeUserId) to avoid self-notifications.
+ */
+async function getJobSupervisors(jobId, excludeUserId = null) {
+  const supervisorIds = new Set();
+
+  // TL and manager of each team assigned to this job
+  const { data: jtRows } = await supabase
+    .from('job_teams')
+    .select('team_id, team:teams!job_teams_team_id_fkey(tl_id, manager_id)')
+    .eq('job_id', jobId);
+
+  for (const row of (jtRows || [])) {
+    if (row.team?.tl_id) supervisorIds.add(row.team.tl_id);
+    if (row.team?.manager_id) supervisorIds.add(row.team.manager_id);
+  }
+
+  // All admins always get notified
+  const { data: admins } = await supabase.from('users').select('id').eq('role', 'admin');
+  for (const a of (admins || [])) supervisorIds.add(a.id);
+
+  if (excludeUserId) supervisorIds.delete(excludeUserId);
+  return [...supervisorIds];
+}
+
 // POST /api/jobs/:id/upload — Batch upload resumes
 router.post('/jobs/:id/upload', authMiddleware, upload.array('resumes', 100), async (req, res) => {
+
   const { id: jobId } = req.params;
   const recruiterId = req.user.id;
 
@@ -245,20 +272,23 @@ router.post('/jobs/:id/upload', authMiddleware, upload.array('resumes', 100), as
   logger.info(`[Upload] Done: ${results.length}/${req.files.length} succeeded, ${errors.length} failed`);
 
   if (results.length > 0) {
-    // Notify TL of the team about new uploads
-    if (job.assigned_team_id) {
-      const { data: team } = await supabase.from('teams').select('tl_id, name').eq('id', job.assigned_team_id).single();
-      if (team?.tl_id && team.tl_id !== recruiterId) {
-        await logActivity(
-          recruiterId, 'resumes_uploaded', 'job', jobId,
-          { count: results.length, job_title: job.job_title },
-          [team.tl_id],
-          'Resumes uploaded',
-          `${results.length} resume(s) uploaded to job "${job.job_title}".`
-        );
-      }
+    // Notify TL, team manager, and all admins about new uploads
+    const supervisors = await getJobSupervisors(jobId, recruiterId);
+    if (supervisors.length > 0) {
+      const { data: uploader } = await supabase.from('users').select('name, email').eq('id', recruiterId).single();
+      const uploaderName = uploader?.name || uploader?.email || 'A recruiter';
+
+      await logActivity(
+        recruiterId, 'resumes_uploaded', 'job', jobId,
+        { count: results.length, job_title: job.job_title, uploaded_by: uploaderName },
+        supervisors,
+        `${uploaderName} uploaded ${results.length} resume(s)`,
+        `${uploaderName} uploaded ${results.length} resume(s) to job "${job.job_title}".`
+      );
     }
   }
+
+
 
   if (results.length === 0) {
     return res.status(500).json({ error: errors[0]?.error || 'All uploads failed', errors });
@@ -271,14 +301,15 @@ router.post('/jobs/:id/upload', authMiddleware, upload.array('resumes', 100), as
   });
 });
 
-// GET /api/jobs/:id/candidates — role-scoped
+// GET /api/jobs/:id/candidates — all roles see ALL candidates for the job
+// Optional ?mine=true → restrict to current user's uploads only (used by "My Candidates" page)
 router.get('/jobs/:id/candidates', authMiddleware, async (req, res) => {
   const { id: jobId } = req.params;
-  const { status, page = 1, limit = 50 } = req.query;
-  const { role, id: userId } = req.user;
+  const { status, page = 1, limit = 50, mine } = req.query;
+  const { id: userId } = req.user;
 
-  // Verify job access (simplified: check job exists and user role)
-  const { data: job } = await supabase.from('jobs').select('id, assigned_team_id, created_by').eq('id', jobId).single();
+  // Verify job exists
+  const { data: job } = await supabase.from('jobs').select('id').eq('id', jobId).single();
   if (!job) return res.status(404).json({ error: 'Job not found' });
 
   let query = supabase
@@ -292,11 +323,11 @@ router.get('/jobs/:id/candidates', authMiddleware, async (req, res) => {
     .order('created_at', { ascending: false })
     .range((page - 1) * limit, page * limit - 1);
 
-  // Recruiter and TL: "My Candidates" = only what they personally uploaded
-  if (role === 'recruiter' || role === 'tl') {
+  // ?mine=true → restrict to the current user's uploads ("My Candidates" page)
+  if (mine === 'true') {
     query = query.eq('recruiter_id', userId);
   }
-  // manager, admin see all candidates for this job
+  // All roles see all candidates by default
 
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: 'Failed to fetch candidates' });
@@ -444,13 +475,23 @@ router.patch('/candidates/:id/status', authMiddleware, requireRole('admin', 'man
 
   if (error || !data) return res.status(404).json({ error: 'Candidate not found or update failed' });
 
-  await logActivity(
-    req.user.id, `candidate_${status}`, 'candidate', req.params.id,
-    { status, job_id: data.job_id },
-    [data.recruiter_id],
-    'Candidate status updated',
-    `Your candidate has been marked as "${status}".`
-  );
+  // Notify recruiter (if they didn't make the change) + all supervisors
+  const notifyIds = new Set();
+  if (data.recruiter_id && data.recruiter_id !== req.user.id) notifyIds.add(data.recruiter_id);
+  const supervisors = await getJobSupervisors(data.job_id, req.user.id);
+  supervisors.forEach(id => notifyIds.add(id));
+  notifyIds.delete(req.user.id);
+
+  if (notifyIds.size > 0) {
+    const actorName = req.user.name || req.user.email || 'Someone';
+    await logActivity(
+      req.user.id, `candidate_${status}`, 'candidate', req.params.id,
+      { status, job_id: data.job_id },
+      [...notifyIds],
+      `Candidate marked as "${status}"`,
+      `${actorName} marked a candidate as "${status}".`
+    );
+  }
 
   logger.info(`Candidate ${req.params.id} status updated to ${status} by ${req.user.id}`);
   res.json({ candidate: data });
@@ -491,13 +532,23 @@ router.patch('/candidates/:id/hiring-status', authMiddleware, requireRole('admin
 
   if (error || !data) return res.status(404).json({ error: 'Candidate not found or update failed' });
 
-  if (data.recruiter_id && data.recruiter_id !== req.user.id) {
+  // Notify recruiter (if different from actor) + all job supervisors
+  const notifyIds = new Set();
+  if (data.recruiter_id && data.recruiter_id !== req.user.id) notifyIds.add(data.recruiter_id);
+  const supervisors = await getJobSupervisors(data.job_id, req.user.id);
+  supervisors.forEach(id => notifyIds.add(id));
+  notifyIds.delete(req.user.id);
+
+  if (notifyIds.size > 0) {
+    const actorName = req.user.name || req.user.email || 'Someone';
+    const statusLabel = hiring_status.replace(/_/g, ' ');
+    const reasonSuffix = updates.rejection_reason ? `: ${updates.rejection_reason}` : '.';
     await logActivity(
       req.user.id, `hiring_status_${hiring_status}`, 'candidate', req.params.id,
       { hiring_status, rejection_reason: updates.rejection_reason },
-      [data.recruiter_id],
-      'Hiring status updated',
-      `Candidate hiring status changed to "${hiring_status.replace(/_/g, ' ')}".`
+      [...notifyIds],
+      `Hiring status updated to "${statusLabel}"`,
+      `${actorName} updated a candidate's hiring status to "${statusLabel}"${reasonSuffix}`
     );
   }
 

@@ -61,14 +61,12 @@ async function buildJobsQuery(user) {
     return query.in('id', jobIds);
   }
 
-  // Recruiter: jobs in the teams they belong to (via job_teams OR assigned_team_id)
-  const { data: memberships } = await supabase
-    .from('team_members').select('team_id').eq('user_id', userId);
-  const teamIds = (memberships || []).map(m => m.team_id);
-  if (teamIds.length === 0) return query.eq('id', '00000000-0000-0000-0000-000000000000');
-  const { data: jtRows } = await supabase
-    .from('job_teams').select('job_id').in('team_id', teamIds);
-  const jobIds = (jtRows || []).map(r => r.job_id);
+  // Recruiter: ONLY jobs explicitly assigned to them by a TL via job_recruiter_assignments
+  const { data: assignments } = await supabase
+    .from('job_recruiter_assignments')
+    .select('job_id')
+    .eq('recruiter_id', userId);
+  const jobIds = (assignments || []).map(a => a.job_id);
   if (jobIds.length === 0) return query.eq('id', '00000000-0000-0000-0000-000000000000');
   return query.in('id', jobIds);
 }
@@ -112,16 +110,21 @@ router.post('/', requireRole('admin', 'manager'), async (req, res) => {
     });
   }
 
-  // Notify TL of assigned team
+  // Notify TL of assigned team + all admins
   if (assigned_team_id) {
     const { data: team } = await supabase.from('teams').select('tl_id, name').eq('id', assigned_team_id).single();
-    if (team?.tl_id) {
+    // Collect TL + all admins
+    const { data: adminUsers } = await supabase.from('users').select('id').eq('role', 'admin');
+    const notifySet = new Set((adminUsers || []).map(u => u.id));
+    if (team?.tl_id) notifySet.add(team.tl_id);
+    notifySet.delete(req.user.id); // don't notify the creator
+    if (notifySet.size > 0) {
       await logActivity(
         req.user.id, 'job_created', 'job', data.id,
         { job_title, team_id: assigned_team_id },
-        [team.tl_id],
+        [...notifySet],
         'New job assigned to your team',
-        `Job "${job_title}" has been assigned to team "${team.name}".`
+        `Job "${job_title}" has been assigned to team "${team?.name || ''}".`
       );
     }
   } else {
@@ -294,16 +297,25 @@ router.post('/:id/teams', requireRole('admin', 'manager'), async (req, res) => {
     await supabase.from('jobs').update({ assigned_team_id: team_ids[0] }).eq('id', req.params.id);
   }
 
-  // Notify TLs of all assigned teams
+  // Notify TL + manager of each team + all admins
+  const { data: adminUsers } = await supabase.from('users').select('id').eq('role', 'admin');
+  const globalAdminIds = (adminUsers || []).map(u => u.id);
+
   for (const team_id of team_ids) {
-    const { data: team } = await supabase.from('teams').select('tl_id, name').eq('id', team_id).single();
-    if (team?.tl_id) {
-      await logActivity(
-        req.user.id, 'job_team_assigned', 'job', req.params.id,
-        { team_id }, [team.tl_id],
-        'Job assigned to your team',
-        `A job has been assigned to team "${team.name}".`
-      );
+    const { data: team } = await supabase.from('teams').select('tl_id, manager_id, name').eq('id', team_id).single();
+    if (team) {
+      const notifySet = new Set(globalAdminIds);
+      if (team.tl_id) notifySet.add(team.tl_id);
+      if (team.manager_id) notifySet.add(team.manager_id);
+      notifySet.delete(req.user.id);
+      if (notifySet.size > 0) {
+        await logActivity(
+          req.user.id, 'job_team_assigned', 'job', req.params.id,
+          { team_id }, [...notifySet],
+          'Job assigned to your team',
+          `A job has been assigned to team "${team.name}".`
+        );
+      }
     }
   }
 

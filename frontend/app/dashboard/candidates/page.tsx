@@ -296,8 +296,11 @@ export default function CandidatesPage() {
   const jobs = jobsData?.jobs ?? [];
 
   const { data, isLoading } = useQuery({
-    queryKey: ['candidates', selectedJobId, scoreFilter],
-    queryFn: () => candidatesApi.list(selectedJobId, scoreFilter ? { status: scoreFilter } : {}),
+    queryKey: ['my-candidates', selectedJobId, scoreFilter, role],
+    queryFn: () => candidatesApi.list(selectedJobId, {
+      status: scoreFilter || undefined,
+      mine: true, // always show only what the current user uploaded
+    }),
     enabled: !!selectedJobId,
   });
   const candidates = data?.candidates ?? [];
@@ -306,7 +309,7 @@ export default function CandidatesPage() {
     mutationFn: ({ id, status }: { id: string; status: string }) => candidatesApi.updateStatus(id, status),
     onSuccess: () => {
       toast.success('Pipeline status updated');
-      queryClient.invalidateQueries({ queryKey: ['candidates', selectedJobId] });
+      queryClient.invalidateQueries({ queryKey: ['my-candidates', selectedJobId] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -316,7 +319,7 @@ export default function CandidatesPage() {
       candidatesApi.updateHiringStatus(id, hiring_status, rejection_reason, hiring_feedback),
     onSuccess: (_, vars) => {
       toast.success(`Hiring status set to "${HIRING_STATUSES.find(h => h.value === vars.hiring_status)?.label}"`);
-      queryClient.invalidateQueries({ queryKey: ['candidates', selectedJobId] });
+      queryClient.invalidateQueries({ queryKey: ['my-candidates', selectedJobId] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -327,7 +330,7 @@ export default function CandidatesPage() {
       <div style={{ marginBottom: '1.75rem' }}>
         <h1 style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--text-primary)' }}>📋 My Candidates</h1>
         <p style={{ color: 'var(--text-muted)', marginTop: '0.25rem', fontSize: '0.875rem' }}>
-          {role === 'admin' || role === 'manager' ? 'Candidate pipeline across jobs' : 'Candidates you personally uploaded'}
+          Candidates you personally uploaded
         </p>
       </div>
 

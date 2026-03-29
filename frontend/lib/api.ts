@@ -206,9 +206,12 @@ export const talentPoolApi = {
 
 // ─── Candidates ───────────────────────────────────────────────────────────────
 export const candidatesApi = {
-  list: (jobId: string, params?: { status?: string }) => {
-    const q = params?.status ? `?status=${params.status}` : '';
-    return apiFetch<{ candidates: Candidate[] }>(`/api/jobs/${jobId}/candidates${q}`);
+  list: (jobId: string, params?: { status?: string; mine?: boolean }) => {
+    const q = new URLSearchParams();
+    if (params?.status) q.set('status', params.status);
+    if (params?.mine) q.set('mine', 'true');
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    return apiFetch<{ candidates: Candidate[] }>(`/api/jobs/${jobId}/candidates${qs}`);
   },
   get: (id: string) => apiFetch<{ candidate: CandidateDetail }>(`/api/candidates/${id}`),
   updateStatus: (id: string, status: string) =>
@@ -304,7 +307,11 @@ export async function exportCSV(jobId: string, jobTitle: string) {
   const res = await fetch(`${API_URL}/api/jobs/${jobId}/export`, {
     headers: { Authorization: `Bearer ${session.access_token}` },
   });
-  if (!res.ok) throw new Error('Export failed');
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Export failed' }));
+    throw new Error(err.error || 'Export failed');
+  }
+
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
