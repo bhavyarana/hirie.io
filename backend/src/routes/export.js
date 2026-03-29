@@ -7,12 +7,11 @@ const authMiddleware = require('../middleware/auth');
 router.get('/jobs/:id/export', authMiddleware, async (req, res) => {
   const { id: jobId } = req.params;
 
-  // Verify job ownership
+  // Verify job exists (any authenticated user can export)
   const { data: job } = await supabase
     .from('jobs')
     .select('id, job_title, company_name')
     .eq('id', jobId)
-    .eq('recruiter_id', req.user.id)
     .single();
 
   if (!job) {
@@ -22,11 +21,12 @@ router.get('/jobs/:id/export', authMiddleware, async (req, res) => {
   const { data: candidates, error } = await supabase
     .from('candidates')
     .select(`
-      name, email, phone, resume_file_name, processing_status, created_at,
+      name, email, phone, resume_file_name, processing_status, hiring_status,
+      hiring_feedback, rejection_reason, created_at,
+      recruiter:users!candidates_recruiter_id_fkey(name, email),
       resume_scores(score, status, matched_skills, missing_skills, strengths, weaknesses, summary)
     `)
     .eq('job_id', jobId)
-    .eq('recruiter_id', req.user.id)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -40,7 +40,11 @@ router.get('/jobs/:id/export', authMiddleware, async (req, res) => {
     'Phone',
     'Resume File',
     'Score',
-    'Status',
+    'AI Status',
+    'Hiring Status',
+    'Hiring Feedback',
+    'Rejection Reason',
+    'Uploaded By',
     'Strengths',
     'Missing Skills',
     'Matched Skills',
@@ -60,6 +64,8 @@ router.get('/jobs/:id/export', authMiddleware, async (req, res) => {
 
   const rows = candidates.map(c => {
     const score = c.resume_scores?.[0];
+    const uploaderName = c.recruiter?.name || c.recruiter?.email || '';
+    const hiringLabel = (c.hiring_status || '').replace(/_/g, ' ');
     return [
       escapeCSV(c.name),
       escapeCSV(c.email),
@@ -67,6 +73,10 @@ router.get('/jobs/:id/export', authMiddleware, async (req, res) => {
       escapeCSV(c.resume_file_name),
       escapeCSV(score?.score),
       escapeCSV(score?.status),
+      escapeCSV(hiringLabel),
+      escapeCSV(c.hiring_feedback),
+      escapeCSV(c.rejection_reason),
+      escapeCSV(uploaderName),
       escapeCSV(score?.strengths),
       escapeCSV(score?.missing_skills),
       escapeCSV(score?.matched_skills),
@@ -84,5 +94,6 @@ router.get('/jobs/:id/export', authMiddleware, async (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.send(csvContent);
 });
+
 
 module.exports = router;
