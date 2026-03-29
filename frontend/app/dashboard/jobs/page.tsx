@@ -50,6 +50,15 @@ export default function JobsListPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) => jobsApi.update(id, { status } as never),
+    onSuccess: (_, vars) => {
+      toast.success(`Job marked as ${vars.status}`);
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const handleDelete = (e: React.MouseEvent, job: Job) => {
     e.preventDefault(); e.stopPropagation();
     if (confirm(`Delete job "${job.job_title}"? This will also delete all associated candidates.`)) deleteMutation.mutate(job.id);
@@ -143,7 +152,7 @@ export default function JobsListPage() {
         <>
           {hasActiveFilters && <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginBottom: '0.875rem' }}>Showing {filteredJobs.length} of {allJobs.length} job{allJobs.length !== 1 ? 's' : ''}</p>}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1.25rem' }}>
-            {filteredJobs.map(job => <JobCard key={job.id} job={job} canManage={canManage} searchQuery={search} onEdit={handleEdit} onDelete={handleDelete} />)}
+            {filteredJobs.map(job => <JobCard key={job.id} job={job} canManage={canManage} searchQuery={search} onEdit={handleEdit} onDelete={handleDelete} onStatusChange={(id, status) => updateStatusMutation.mutate({ id, status })} />)}
           </div>
         </>
       )}
@@ -164,7 +173,7 @@ function Highlight({ text, query }: { text: string; query: string }) {
   );
 }
 
-function JobCard({ job, canManage, searchQuery = '', onEdit, onDelete }: { job: Job; canManage: boolean; searchQuery?: string; onEdit: (e: React.MouseEvent, id: string) => void; onDelete: (e: React.MouseEvent, job: Job) => void; }) {
+function JobCard({ job, canManage, searchQuery = '', onEdit, onDelete, onStatusChange }: { job: Job; canManage: boolean; searchQuery?: string; onEdit: (e: React.MouseEvent, id: string) => void; onDelete: (e: React.MouseEvent, job: Job) => void; onStatusChange: (id: string, status: string) => void; }) {
   const [hovered, setHovered] = useState(false);
   const statusColors: Record<string, { bg: string; text: string; border: string }> = {
     active: { bg: 'rgba(34,197,94,0.1)',   text: '#22c55e', border: 'rgba(34,197,94,0.3)'  },
@@ -193,7 +202,24 @@ function JobCard({ job, canManage, searchQuery = '', onEdit, onDelete }: { job: 
               <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}><Highlight text={job.company_name} query={searchQuery} /></p>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '0.75rem', flexShrink: 0 }}>
-              <span style={{ padding: '0.25rem 0.625rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 600, background: sc.bg, color: sc.text, border: `1px solid ${sc.border}` }}>{job.status}</span>
+              {canManage ? (
+                <select
+                  value={job.status}
+                  onClick={e => e.preventDefault()}
+                  onChange={e => { e.preventDefault(); e.stopPropagation(); onStatusChange(job.id, e.target.value); }}
+                  style={{
+                    padding: '0.2rem 0.5rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 600,
+                    background: sc.bg, color: sc.text, border: `1px solid ${sc.border}`,
+                    cursor: 'pointer', outline: 'none', appearance: 'auto',
+                  }}
+                >
+                  <option value="active">active</option>
+                  <option value="draft">draft</option>
+                  <option value="closed">closed</option>
+                </select>
+              ) : (
+                <span style={{ padding: '0.25rem 0.625rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 600, background: sc.bg, color: sc.text, border: `1px solid ${sc.border}` }}>{job.status}</span>
+              )}
               {canManage && (
                 <div style={{ display: 'flex', gap: '0.25rem' }}>
                   <button onClick={e => onEdit(e, job.id)} title="Edit job" style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: '0.375rem', padding: '0.3rem 0.45rem', cursor: 'pointer', color: '#a5b4fc', fontSize: '0.75rem', lineHeight: 1 }}
