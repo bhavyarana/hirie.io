@@ -32,7 +32,40 @@ export const HIRING_STATUSES = [
 
 const HIRING_COLOR: Record<string, string> = Object.fromEntries(HIRING_STATUSES.map(s => [s.value, s.color]));
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+function exportMyCandidatesCSV(candidates: Candidate[], jobTitle: string) {
+  const escape = (v: unknown) => {
+    if (v === null || v === undefined) return '';
+    const s = Array.isArray(v) ? v.join('; ') : String(v);
+    return s.includes(',') || s.includes('"') || s.includes('\n')
+      ? `"${s.replace(/"/g, '""')}"`
+      : s;
+  };
+
+  const headers = ['Name','Email','Phone','Score','AI Status','Hiring Status','Matched Skills','Missing Skills','Summary','Resume File','Uploaded At'];
+  const rows = candidates.map(c => [
+    escape(c.name),
+    escape(c.email),
+    escape(c.phone),
+    escape(c.score != null ? Math.round(c.score) : ''),
+    escape(c.score_status),
+    escape(HIRING_STATUSES.find(h => h.value === c.hiring_status)?.label || c.hiring_status || ''),
+    escape(c.matched_skills),
+    escape(c.missing_skills),
+    escape(c.summary),
+    escape(c.resume_file_name),
+    escape(new Date(c.created_at).toLocaleDateString()),
+  ].join(','));
+
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `my-candidates-${jobTitle.replace(/[^a-z0-9]/gi, '_')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 
 function ScorePill({ score, status }: { score: number | null; status: string | null }) {
   const colorMap: Record<string, { bg: string; text: string; border: string }> = {
@@ -290,11 +323,29 @@ export default function CandidatesPage() {
   return (
     <div style={{ padding: '2rem', maxWidth: '1300px' }}>
       {/* Header */}
-      <div style={{ marginBottom: '1.75rem' }}>
-        <h1 style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--text-primary)' }}>📋 My Candidates</h1>
-        <p style={{ color: 'var(--text-muted)', marginTop: '0.25rem', fontSize: '0.875rem' }}>
-          Candidates you personally uploaded
-        </p>
+      <div style={{ marginBottom: '1.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h1 style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--text-primary)' }}>📋 My Candidates</h1>
+          <p style={{ color: 'var(--text-muted)', marginTop: '0.25rem', fontSize: '0.875rem' }}>
+            Candidates you personally uploaded
+          </p>
+        </div>
+        {selectedJobId && candidates.length > 0 && (
+          <button
+            onClick={() => {
+              const job = jobs.find(j => j.id === selectedJobId);
+              exportMyCandidatesCSV(candidates, job?.job_title || 'job');
+            }}
+            style={{
+              padding: '0.5rem 1.1rem', borderRadius: '0.5rem', cursor: 'pointer',
+              fontSize: '0.8rem', fontWeight: 600,
+              background: 'var(--bg-card)', border: '1px solid var(--border)',
+              color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.4rem',
+            }}
+          >
+            📥 Export CSV
+          </button>
+        )}
       </div>
 
       {/* Filters bar */}
