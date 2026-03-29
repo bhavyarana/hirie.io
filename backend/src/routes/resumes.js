@@ -549,7 +549,7 @@ router.patch('/candidates/:id/hiring-status', authMiddleware, requireRole('admin
   // First fetch the candidate to check ownership
   const { data: existing } = await supabase
     .from('candidates')
-    .select('id, recruiter_id, job_id')
+    .select('id, recruiter_id, job_id, name, job:jobs!candidates_job_id_fkey(job_title)')
     .eq('id', req.params.id)
     .single();
 
@@ -583,13 +583,15 @@ router.patch('/candidates/:id/hiring-status', authMiddleware, requireRole('admin
   if (notifyIds.size > 0) {
     const actorName = req.user.name || req.user.email || 'Someone';
     const statusLabel = hiring_status.replace(/_/g, ' ');
-    const reasonSuffix = updates.rejection_reason ? `: ${updates.rejection_reason}` : '.';
+    const candidateName = existing.name || data.name || 'A candidate';
+    const jobTitle = existing.job?.job_title || 'a job';
+    const reasonSuffix = updates.rejection_reason ? ` (Reason: ${updates.rejection_reason})` : '.';
     await logActivity(
       req.user.id, `hiring_status_${hiring_status}`, 'candidate', req.params.id,
       { hiring_status, rejection_reason: updates.rejection_reason },
       [...notifyIds],
-      `Hiring status updated to "${statusLabel}"`,
-      `${actorName} updated a candidate's hiring status to "${statusLabel}"${reasonSuffix}`
+      `"${candidateName}" status → "${statusLabel}"`,
+      `${actorName} updated ${candidateName}'s hiring status to "${statusLabel}" for job "${jobTitle}"${reasonSuffix}`
     );
   }
 

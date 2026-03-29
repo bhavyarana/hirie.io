@@ -483,19 +483,51 @@ export default function JobDetailPage({ params }: Props) {
         </div>
       )}
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: '0.25rem', background: 'var(--bg-input)', padding: '0.25rem', borderRadius: '0.625rem', width: 'fit-content', marginBottom: '1.5rem' }}>
-        {(['candidates', 'analytics'] as const).map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)} style={{
-            padding: '0.5rem 1.25rem', borderRadius: '0.5rem', cursor: 'pointer',
-            fontSize: '0.875rem', fontWeight: 500, transition: 'all 0.2s',
-            background: activeTab === tab ? '#6366f1' : 'transparent',
-            color: activeTab === tab ? '#fff' : 'var(--text-muted)',
-            border: 'none',
-          }}>
-            {tab === 'candidates' ? `👥 Candidates (${candidates.length})` : '📊 Analytics'}
-          </button>
-        ))}
+      {/* Tabs + action button */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.25rem', background: 'var(--bg-input)', padding: '0.25rem', borderRadius: '0.625rem', width: 'fit-content' }}>
+          {(['candidates', 'analytics'] as const).map(tab => (
+            <button key={tab} onClick={() => setActiveTab(tab)} style={{
+              padding: '0.5rem 1.25rem', borderRadius: '0.5rem', cursor: 'pointer',
+              fontSize: '0.875rem', fontWeight: 500, transition: 'all 0.2s',
+              background: activeTab === tab ? '#6366f1' : 'transparent',
+              color: activeTab === tab ? '#fff' : 'var(--text-muted)',
+              border: 'none',
+            }}>
+              {tab === 'candidates' ? `👥 Candidates (${candidates.length})` : '📊 Analytics'}
+            </button>
+          ))}
+        </div>
+
+        {/* Coming-soon feature button */}
+        <button
+          title="Coming soon"
+          onMouseEnter={e => {
+            const b = e.currentTarget;
+            b.style.background = 'var(--bg-input)';
+            b.style.color = 'var(--text-muted)';
+            b.style.opacity = '0.6';
+            b.style.boxShadow = 'none';
+          }}
+          onMouseLeave={e => {
+            const b = e.currentTarget;
+            b.style.background = 'linear-gradient(135deg, #6366f1, #8b5cf6)';
+            b.style.color = '#fff';
+            b.style.opacity = '1';
+            b.style.boxShadow = '0 0 18px rgba(99,102,241,0.35)';
+          }}
+          onClick={e => e.preventDefault()}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '0.45rem',
+            padding: '0.5rem 1.125rem', borderRadius: '0.625rem',
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            border: 'none', color: '#fff', fontSize: '0.825rem', fontWeight: 600,
+            cursor: 'not-allowed', boxShadow: '0 0 18px rgba(99,102,241,0.35)',
+            transition: 'opacity 0.2s, background 0.2s',
+          }}
+        >
+          📞 Start Screening Call
+        </button>
       </div>
 
       {/* Candidates Tab */}
