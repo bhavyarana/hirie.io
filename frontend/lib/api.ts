@@ -341,6 +341,7 @@ export interface Team {
   member_count?: number;
   manager?: { id: string; name: string | null; email: string };
   tl?: { id: string; name: string | null; email: string };
+  jobs?: { id: string; job_title: string; company_name: string; status: string }[];
   created_at: string;
 }
 

@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { teamsApi, jobsApi, type Team } from '@/lib/api';
+import { teamsApi, type Team } from '@/lib/api';
 import { useUserContext } from '@/lib/context/UserContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -16,26 +16,12 @@ export default function MyTeamsPage() {
   }, [role, router]);
 
   const { data: teamsData, isLoading: teamsLoading } = useQuery({
-    queryKey: ['my-teams'],
+    queryKey: ['teams'],
     queryFn: () => teamsApi.list(),
     enabled: role === 'tl',
   });
 
-  const { data: jobsData } = useQuery({
-    queryKey: ['jobs'],
-    queryFn: () => jobsApi.list(),
-    enabled: role === 'tl',
-  });
-
   const teams: Team[] = teamsData?.teams ?? [];
-  const allJobs = jobsData?.jobs ?? [];
-
-  function activeJobsForTeam(teamId: string) {
-    return allJobs.filter(j =>
-      j.status === 'active' &&
-      ((j.teams ?? []).some((t: { id: string }) => t.id === teamId) || j.assigned_team_id === teamId)
-    ).length;
-  }
 
   if (teamsLoading) {
     return <div style={{ padding: '2rem', color: 'var(--text-muted)' }}>Loading teams…</div>;
@@ -56,43 +42,65 @@ export default function MyTeamsPage() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {teams.map(team => {
-            const activeJobs = activeJobsForTeam(team.id);
             const memberCount = team.member_count ?? 0;
+            const teamJobs = team.jobs ?? [];
+            const activeCount = teamJobs.filter(j => j.status === 'active').length;
 
             return (
               <div key={team.id} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '1rem', overflow: 'hidden', transition: 'border-color 0.2s' }}
                 onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(99,102,241,0.4)'}
                 onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'}>
 
+                {/* Top row: team meta + manage button */}
                 <div style={{ padding: '1.25rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  {/* Left: team info */}
                   <div>
                     <h2 style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: '1.05rem', marginBottom: '0.5rem' }}>🏢 {team.name}</h2>
-                    <div style={{ display: 'flex', gap: '1.25rem', fontSize: '0.8rem' }}>
+                    <div style={{ display: 'flex', gap: '1.25rem', fontSize: '0.8rem', flexWrap: 'wrap' }}>
                       <span style={{ color: 'var(--text-muted)' }}>
                         <span style={{ color: '#6366f1', fontWeight: 600 }}>{memberCount}</span> member{memberCount !== 1 ? 's' : ''}
                       </span>
                       <span style={{ color: 'var(--text-muted)' }}>
-                        <span style={{ color: '#22c55e', fontWeight: 600 }}>{activeJobs}</span> active job{activeJobs !== 1 ? 's' : ''}
+                        <span style={{ color: '#22c55e', fontWeight: 600 }}>{activeCount}</span> active job{activeCount !== 1 ? 's' : ''}
                       </span>
-                      {team.tl && (
-                        <span style={{ color: 'var(--text-muted)' }}>
-                          👤 TL: <span style={{ color: 'var(--text-secondary)' }}>{team.tl.name || team.tl.email}</span>
-                        </span>
-                      )}
                       {team.manager && (
                         <span style={{ color: 'var(--text-muted)' }}>
-                          👤 Manager: <span style={{ color: 'var(--text-secondary)' }}>{team.manager.name || team.manager.email}</span>
+                          Manager: <span style={{ color: 'var(--text-secondary)' }}>{team.manager.name || team.manager.email}</span>
                         </span>
                       )}
                     </div>
                   </div>
 
-                  {/* Right: action button */}
                   <Link href={`/dashboard/teams/${team.id}`}
                     style={{ padding: '0.5rem 1.125rem', borderRadius: '0.5rem', border: '1px solid rgba(99,102,241,0.35)', color: '#6366f1', textDecoration: 'none', fontSize: '0.8rem', fontWeight: 600, background: 'rgba(99,102,241,0.07)', whiteSpace: 'nowrap', transition: 'all 0.15s' }}>
                     Manage Team →
                   </Link>
+                </div>
+
+                {/* Bottom row: assigned job badges */}
+                <div style={{ borderTop: '1px solid var(--border)', padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>Jobs:</span>
+                  {teamJobs.length === 0 ? (
+                    <span style={{ color: 'var(--text-faint)', fontSize: '0.75rem' }}>No jobs assigned</span>
+                  ) : (
+                    teamJobs.map(j => {
+                      const dotColor = j.status === 'active' ? '#22c55e' : j.status === 'draft' ? '#f59e0b' : '#94a3b8';
+                      return (
+                        <Link
+                          key={j.id}
+                          href={`/dashboard/jobs/${j.id}`}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                            padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.72rem',
+                            background: 'var(--bg-input)', border: '1px solid var(--border)',
+                            color: 'var(--text-secondary)', textDecoration: 'none',
+                          }}
+                        >
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
+                          {j.job_title}
+                        </Link>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             );

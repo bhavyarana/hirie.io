@@ -227,7 +227,7 @@ export default function TeamsPage() {
                 )}
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1rem' }}>
                 <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.8rem' }}>
                   <span style={{ color: 'var(--text-muted)', minWidth: '60px' }}>Manager:</span>
                   <span style={{ color: 'var(--text-secondary)' }}>{team.manager?.name || team.manager?.email || '—'}</span>
@@ -236,6 +236,38 @@ export default function TeamsPage() {
                   <span style={{ color: 'var(--text-muted)', minWidth: '60px' }}>TL:</span>
                   <span style={{ color: '#22c55e' }}>{team.tl?.name || team.tl?.email || '—'}</span>
                 </div>
+              </div>
+
+              {/* Assigned Jobs */}
+              <div style={{ marginBottom: '1.25rem' }}>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.68rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem' }}>
+                  Assigned Jobs
+                </p>
+                {(team.jobs ?? []).length === 0 ? (
+                  <span style={{ color: 'var(--text-faint)', fontSize: '0.75rem' }}>No jobs assigned</span>
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                    {(team.jobs ?? []).map(j => {
+                      const dotColor = j.status === 'active' ? '#22c55e' : j.status === 'draft' ? '#f59e0b' : '#94a3b8';
+                      return (
+                        <Link
+                          key={j.id}
+                          href={`/dashboard/jobs/${j.id}`}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                            padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.72rem',
+                            background: 'var(--bg-input)', border: '1px solid var(--border)',
+                            color: 'var(--text-secondary)', textDecoration: 'none',
+                            transition: 'border-color 0.15s',
+                          }}
+                        >
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
+                          {j.job_title}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <Link href={`/dashboard/teams/${team.id}`} style={{ display: 'block', textAlign: 'center', padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid rgba(99,102,241,0.3)', color: '#a5b4fc', textDecoration: 'none', fontSize: '0.8rem', fontWeight: 500, transition: 'all 0.15s' }}>

@@ -16,7 +16,8 @@ router.get('/', async (req, res) => {
     *,
     manager:users!teams_manager_id_fkey(id, name, email),
     tl:users!teams_tl_id_fkey(id, name, email),
-    team_members(count)
+    team_members(count),
+    job_teams(job:jobs!job_teams_job_id_fkey(id, job_title, company_name, status))
   `).order('created_at', { ascending: false });
 
   if (role === 'manager') {
@@ -45,6 +46,8 @@ router.get('/', async (req, res) => {
     ...t,
     member_count: t.team_members?.[0]?.count || 0,
     team_members: undefined,
+    jobs: (t.job_teams || []).map(jt => jt.job).filter(Boolean),
+    job_teams: undefined,
   }));
 
   res.json({ teams });
