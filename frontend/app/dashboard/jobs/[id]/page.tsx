@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useDropzone } from 'react-dropzone';
 import { candidatesApi, analyticsApi, uploadResumes, exportCSV, type Candidate, usersApi } from '@/lib/api';
 import { jobsApi, jobAssignmentsApi, type JobAssignment } from '@/lib/api';
+import { useUserContext } from '@/lib/context/UserContext';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
@@ -62,6 +63,7 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function JobDetailPage({ params }: Props) {
   const { id: jobId } = use(params);
+  const { role } = useUserContext();
   const [activeTab, setActiveTab] = useState<'candidates' | 'analytics'>('candidates');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [hiringStatusFilter, setHiringStatusFilter] = useState<string>('all');
@@ -70,6 +72,8 @@ export default function JobDetailPage({ params }: Props) {
   const [isUploading, setIsUploading] = useState(false);
   const queryClient = useQueryClient();
   const alertedRejections = useRef<Set<string>>(new Set());
+
+  const canUpdateHiring = role === 'admin' || role === 'manager' || role === 'tl' || role === 'recruiter';
 
   const { data: currentUserData } = useQuery({ queryKey: ['me'], queryFn: () => usersApi.me() });
 
@@ -173,6 +177,16 @@ export default function JobDetailPage({ params }: Props) {
     accept: { 'application/pdf': ['.pdf'], 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'] },
     maxFiles: 100,
     disabled: isUploading || !canUpload,
+  });
+
+  const hiringMutation = useMutation({
+    mutationFn: ({ id, hiring_status }: { id: string; hiring_status: string }) =>
+      candidatesApi.updateHiringStatus(id, hiring_status),
+    onSuccess: () => {
+      toast.success('Hiring status updated');
+      queryClient.invalidateQueries({ queryKey: ['candidates', jobId] });
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   function handleExport() {
@@ -442,8 +456,28 @@ export default function JobDetailPage({ params }: Props) {
                             </div>
                           ) : <span style={{ color: 'var(--text-faint)', fontSize: '0.8rem' }}>—</span>}
                         </td>
-                        <td style={{ padding: '1rem 1.25rem' }}>
-                          <HiringStatusBadge status={c.hiring_status} />
+                        <td style={{ padding: '0.75rem 1.25rem' }}>
+                          {canUpdateHiring && (role === 'admin' || role === 'manager' || c.recruiter_id === currentUser?.id) ? (
+                            <select
+                              value={c.hiring_status || ''}
+                              onChange={e => hiringMutation.mutate({ id: c.id, hiring_status: e.target.value })}
+                              style={{
+                                background: 'var(--bg-input)', border: '1px solid var(--border)',
+                                borderRadius: '0.5rem', padding: '0.3rem 0.5rem',
+                                fontSize: '0.72rem', cursor: 'pointer', outline: 'none',
+                                color: c.hiring_status ? (HIRING_STATUSES[c.hiring_status]?.color || 'var(--text-secondary)') : 'var(--text-muted)',
+                                fontWeight: c.hiring_status ? 600 : 400,
+                                minWidth: '140px',
+                              }}
+                            >
+                              <option value="">— Set status —</option>
+                              {Object.entries(HIRING_STATUSES).map(([val, { label }]) => (
+                                <option key={val} value={val}>{label}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <HiringStatusBadge status={c.hiring_status} />
+                          )}
                         </td>
                         <td style={{ padding: '1rem 1.25rem', minWidth: '120px' }}>
                           {c.recruiter_name ? (

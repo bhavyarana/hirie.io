@@ -523,6 +523,23 @@ router.patch('/candidates/:id/hiring-status', authMiddleware, requireRole('admin
     rejection_reason: hiring_status === 'rejected' ? (rejection_reason || null) : null,
   };
 
+  // First fetch the candidate to check ownership
+  const { data: existing } = await supabase
+    .from('candidates')
+    .select('id, recruiter_id, job_id')
+    .eq('id', req.params.id)
+    .single();
+
+  if (!existing) return res.status(404).json({ error: 'Candidate not found' });
+
+  // Recruiters and TLs can only update candidates they personally uploaded
+  const { role, id: userId } = req.user;
+  if (role === 'recruiter' || role === 'tl') {
+    if (existing.recruiter_id !== userId) {
+      return res.status(403).json({ error: 'You can only update hiring status for candidates you uploaded' });
+    }
+  }
+
   const { data, error } = await supabase
     .from('candidates')
     .update(updates)
@@ -531,6 +548,7 @@ router.patch('/candidates/:id/hiring-status', authMiddleware, requireRole('admin
     .single();
 
   if (error || !data) return res.status(404).json({ error: 'Candidate not found or update failed' });
+
 
   // Notify recruiter (if different from actor) + all job supervisors
   const notifyIds = new Set();
