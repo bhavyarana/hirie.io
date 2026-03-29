@@ -267,6 +267,17 @@ export default function JobDetailPage({ params }: Props) {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => candidatesApi.delete(id),
+    onSuccess: () => {
+      toast.success('Candidate deleted');
+      queryClient.invalidateQueries({ queryKey: ['candidates', jobId] });
+    },
+    onError: (e: Error) => toast.error(e.message || 'Failed to delete candidate'),
+  });
+
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
   function handleExport() {
     exportCSV(jobId, job?.job_title || 'job').catch(err => toast.error(err.message));
   }
@@ -736,6 +747,45 @@ export default function JobDetailPage({ params }: Props) {
                                 style={{ fontSize: '0.72rem', padding: '0.3rem 0.6rem', borderRadius: '0.375rem', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', color: '#f59e0b', cursor: 'pointer' }}>
                                 ↻ Re-extract
                               </button>
+                            )}
+                            {/* Delete button — admin/manager: any; TL/recruiter: own uploads only */}
+                            {(role === 'admin' || role === 'manager' || c.recruiter_id === currentUser?.id) && (
+                              confirmDeleteId === c.id ? (
+                                <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Delete?</span>
+                                  <button
+                                    onClick={() => { deleteMutation.mutate(c.id); setConfirmDeleteId(null); }}
+                                    style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '0.3rem', background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.4)', color: '#ef4444', cursor: 'pointer', fontWeight: 600 }}
+                                  >Yes</button>
+                                  <button
+                                    onClick={() => setConfirmDeleteId(null)}
+                                    style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '0.3rem', background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer' }}
+                                  >No</button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => setConfirmDeleteId(c.id)}
+                                  title="Delete candidate"
+                                  disabled={deleteMutation.isPending}
+                                  style={{
+                                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                    width: '28px', height: '28px', borderRadius: '0.375rem',
+                                    background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.22)',
+                                    color: '#ef4444', cursor: 'pointer', flexShrink: 0,
+                                    opacity: deleteMutation.isPending ? 0.4 : 1,
+                                    transition: 'background 0.15s, border-color 0.15s',
+                                  }}
+                                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(239,68,68,0.14)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(239,68,68,0.5)'; }}
+                                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(239,68,68,0.06)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(239,68,68,0.22)'; }}
+                                >
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="3 6 5 6 21 6" />
+                                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                    <path d="M10 11v6M14 11v6" />
+                                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                                  </svg>
+                                </button>
+                              )
                             )}
                           </div>
                         </td>

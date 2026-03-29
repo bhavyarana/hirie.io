@@ -734,17 +734,26 @@ router.post('/candidates/:id/reprocess', authMiddleware, async (req, res) => {
 });
 
 // DELETE /api/candidates/:id — remove candidate + storage file + talent pool entry
+// Admin/Manager: any candidate. TL/Recruiter: own uploads only.
 router.delete('/candidates/:id', authMiddleware, async (req, res) => {
   const candidateId = req.params.id;
+  const { role, id: userId } = req.user;
 
   const { data: candidate, error } = await supabase
     .from('candidates')
-    .select('id, resume_file_path, resume_hash')
+    .select('id, recruiter_id, resume_file_path, resume_hash')
     .eq('id', candidateId)
     .single();
 
   if (error || !candidate) {
     return res.status(404).json({ error: 'Candidate not found' });
+  }
+
+  // Ownership check for TL / Recruiter
+  if (role === 'tl' || role === 'recruiter') {
+    if (candidate.recruiter_id !== userId) {
+      return res.status(403).json({ error: 'You can only delete candidates you uploaded' });
+    }
   }
 
   // 1. Delete from storage (non-fatal)
@@ -769,7 +778,7 @@ router.delete('/candidates/:id', authMiddleware, async (req, res) => {
     return res.status(500).json({ error: `Failed to delete candidate: ${deleteError.message}` });
   }
 
-  logger.info(`[Delete] Candidate ${candidateId} deleted (storage + talent pool cleaned up)`);
+  logger.info(`[Delete] Candidate ${candidateId} deleted by ${role} ${userId} (storage + talent pool cleaned up)`);
   res.json({ message: 'Candidate deleted' });
 });
 
