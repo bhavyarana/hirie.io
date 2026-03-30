@@ -1,5 +1,7 @@
 require('dotenv').config();
-const { Worker, MetricsTime } = require('bullmq');
+const { Worker, QueueEvents, MetricsTime } = require('bullmq');
+const http = require('http');
+
 const redisConnection  = require('../config/redis');
 const supabase         = require('../config/supabase');
 const { downloadFile } = require('../services/storageService');
@@ -8,10 +10,14 @@ const { parseAndScoreResume, getPlaceholderScore } = require('../services/openai
 const { getResumeScore, classifyResumeWithAI }     = require('../services/resumeValidator');
 const logger = require('../config/logger');
 
-/**
- * Mark a candidate as rejected and log the reason.
- * BullMQ treats this as a successful job completion (no retries).
- */
+// ── Configuration ──────────────────────────────────────────────────────────────
+const CONCURRENCY    = parseInt(process.env.WORKER_CONCURRENCY   || '3');
+const HEALTH_PORT    = parseInt(process.env.WORKER_HEALTH_PORT   || '3002');
+// Max time (ms) a single job is allowed to hold its lock before BullMQ treats it as stalled.
+// Must be longer than the slowest possible job (AI call + Vision OCR can take ~60 s).
+const LOCK_DURATION  = parseInt(process.env.WORKER_LOCK_DURATION || String(5 * 60_000)); // 5 min
+
+// ── Helper: reject a candidate without throwing (no BullMQ retries) ───────────
 async function rejectCandidate(candidateId, fileName, reason) {
   logger.warn(`[Worker] ✗ Rejected "${fileName}" (${candidateId}): ${reason}`);
   await supabase
@@ -20,8 +26,7 @@ async function rejectCandidate(candidateId, fileName, reason) {
     .eq('id', candidateId);
 }
 
-const CONCURRENCY = parseInt(process.env.WORKER_CONCURRENCY || '5');
-
+// ── BullMQ Worker ─────────────────────────────────────────────────────────────
 const worker = new Worker(
   'resume-processing',
   async (job) => {
@@ -89,7 +94,7 @@ const worker = new Worker(
       logger.info(`[Worker] High-confidence resume (${heuristicScore}) — skipping AI classifier for "${fileName}"`);
     }
 
-    // ── Step 4: ONE AI call — parse + score everything ────────────────────────
+    // ── Step 4: ONE AI call — parse + score everything ─────────────────────────
     let basicInfo, profile, scoreResult;
 
     try {
@@ -216,18 +221,43 @@ const worker = new Worker(
   {
     connection: redisConnection,
     concurrency: CONCURRENCY,
+
+    // ── Stalled-job protection ───────────────────────────────────────────────
+    // lockDuration: each job must renew its lock within this window.
+    // If a process dies mid-job, BullMQ re-queues it automatically after lockDuration ms.
+    lockDuration: LOCK_DURATION,
+    // How often BullMQ scans for stalled jobs (default: 30 s is good for production).
+    stalledInterval: 30_000,
+    // A stalled job gets re-queued at most once; after that it is marked failed.
+    maxStalledCount: 1,
+
+    // ── Metrics for Redis Commander / monitoring dashboards ──────────────────
     metrics: { maxDataPoints: MetricsTime.ONE_WEEK },
   }
 );
 
-// ── Event handlers ────────────────────────────────────────────────────────────
+// ── QueueEvents — observability (runs on a separate dedicated Redis connection) ─
+// Logs stalled + permanently-failed events for alerting / monitoring integration.
+const queueEvents = new QueueEvents('resume-processing', {
+  connection: redisConnection.duplicate(), // must use a separate connection
+});
+
+queueEvents.on('stalled', ({ jobId }) => {
+  logger.warn(`[Worker] ⚠ Job ${jobId} stalled — BullMQ will re-queue it`);
+});
+
+queueEvents.on('failed', ({ jobId, failedReason }) => {
+  logger.error(`[Worker] ✗ Job ${jobId} permanently failed: ${failedReason}`);
+});
+
+// ── Worker event handlers ──────────────────────────────────────────────────────
 
 worker.on('completed', (job, result) => {
-  logger.info(`[Worker] Job ${job.id} completed:`, result);
+  logger.info(`[Worker] ✓ Job ${job.id} completed:`, result);
 });
 
 worker.on('failed', async (job, error) => {
-  logger.error(`[Worker] Job ${job?.id} failed: ${error.message}`);
+  logger.error(`[Worker] ✗ Job ${job?.id} failed: ${error.message}`);
   if (job?.data?.candidateId) {
     try {
       await supabase
@@ -245,11 +275,65 @@ worker.on('error', (error) => {
 });
 
 worker.on('ready', () => {
-  logger.info(`[Worker] Resume processor ready (concurrency: ${CONCURRENCY})`);
+  logger.info(`[Worker] Resume processor ready (concurrency: ${CONCURRENCY}, lockDuration: ${LOCK_DURATION}ms)`);
 });
 
-// ── Graceful shutdown ─────────────────────────────────────────────────────────
-process.on('SIGTERM', async () => { await worker.close(); process.exit(0); });
-process.on('SIGINT',  async () => { await worker.close(); process.exit(0); });
+// ── HTTP health probe ──────────────────────────────────────────────────────────
+// Allows container orchestrators (Railway, k8s, Render) to probe the worker's health.
+// GET /health → 200 { status: 'ok' } when running, 503 when draining/closing.
+const healthServer = http.createServer((req, res) => {
+  if (req.url === '/health' && req.method === 'GET') {
+    const isRunning = !worker.closing;
+    res.writeHead(isRunning ? 200 : 503, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      status     : isRunning ? 'ok' : 'closing',
+      concurrency: CONCURRENCY,
+      timestamp  : new Date().toISOString(),
+    }));
+  } else {
+    res.writeHead(404);
+    res.end();
+  }
+});
 
-logger.info('[Worker] Resume processor initialized');
+healthServer.listen(HEALTH_PORT, () => {
+  logger.info(`[Worker] Health probe → http://localhost:${HEALTH_PORT}/health`);
+});
+
+// ── Graceful shutdown ──────────────────────────────────────────────────────────
+// On SIGTERM / SIGINT:
+//   1. Stop accepting new jobs (worker.close() drains in-flight jobs)
+//   2. Close QueueEvents listener
+//   3. Close the health probe server
+//   4. Hard-exit after SHUTDOWN_TIMEOUT if jobs don't finish in time
+const SHUTDOWN_TIMEOUT = parseInt(process.env.WORKER_SHUTDOWN_TIMEOUT || String(90_000));
+
+async function shutdown(signal) {
+  logger.info(`[Worker] ${signal} received — graceful shutdown initiated`);
+
+  // Hard-timeout safety net: force exit if jobs don't finish in time
+  const forceExitTimer = setTimeout(() => {
+    logger.warn(`[Worker] Shutdown timeout (${SHUTDOWN_TIMEOUT}ms) reached — forcing exit`);
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT);
+  forceExitTimer.unref(); // don't let this timer keep the process alive if shutdown is clean
+
+  try {
+    // Drain in-flight jobs gracefully, stop picking up new ones
+    await worker.close();
+    await queueEvents.close();
+    healthServer.close();
+    clearTimeout(forceExitTimer);
+    logger.info('[Worker] Graceful shutdown complete');
+    process.exit(0);
+  } catch (err) {
+    logger.error('[Worker] Error during shutdown:', err.message);
+    clearTimeout(forceExitTimer);
+    process.exit(1);
+  }
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
+
+logger.info(`[Worker] Resume processor initializing (concurrency: ${CONCURRENCY}, health: :${HEALTH_PORT})`);

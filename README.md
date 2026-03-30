@@ -82,14 +82,15 @@ Hirie.io/
 │       │   ├── activityLogger.js    # Notification fan-out helper
 │       │   └── storageService.js    # Supabase Storage download helper
 │       ├── workers/
-│       │   └── resumeProcessor.js  # BullMQ worker (concurrency=5, graceful shutdown)
+│       │   └── resumeProcessor.js  # Standalone BullMQ worker — stalled-job detection,
+│       │                           #   lock duration, QueueEvents, HTTP health probe (:3002)
 │       ├── queues/resumeQueue.js    # BullMQ queue definition
 │       ├── middleware/
 │       │   ├── auth.js              # JWT verification via Supabase
 │       │   └── requireRole.js       # Role-based access guard
 │       └── config/
 │           ├── supabase.js          # Supabase service-role client
-│           ├── redis.js             # IORedis connection
+│           ├── redis.js             # IORedis connection (password + TLS support)
 │           ├── openai.js            # Mistral client
 │           └── logger.js            # Winston logger
 │
@@ -258,11 +259,21 @@ SUPABASE_SERVICE_KEY=your-service-role-key
 MISTRAL_API_KEY=your-mistral-api-key
 MISTRAL_MODEL=mistral-small-latest
 
+# Redis — add password + TLS=true for managed providers (Upstash, Railway)
 REDIS_HOST=localhost
 REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_TLS=false
+
 PORT=3001
 FRONTEND_URL=http://localhost:3000
 NODE_ENV=development
+
+# Worker process (run separately: npm run worker)
+WORKER_CONCURRENCY=3
+WORKER_HEALTH_PORT=3002
+WORKER_LOCK_DURATION=300000
+WORKER_SHUTDOWN_TIMEOUT=90000
 ```
 
 **Frontend** — copy `frontend/.env.local.example` → `frontend/.env.local`:
@@ -278,18 +289,20 @@ NEXT_PUBLIC_API_URL=http://localhost:3001
 # Terminal 1 — Redis (via Docker)
 docker-compose up -d redis
 
-# Terminal 2 — Express API (includes embedded worker)
-cd backend && npm install && npm run start
+# Terminal 2 — BullMQ Worker (standalone — MUST run separately)
+cd backend && npm install && npm run worker
 
-# Terminal 3 — Next.js Frontend
+# Terminal 3 — Express API
+cd backend && npm run start
+
+# Terminal 4 — Next.js Frontend
 cd frontend && npm install && npm run dev
 ```
 
-> **Note**: `npm run start` starts the API **and** embeds the BullMQ worker in the same process. For production or higher throughput, run the worker separately:
-> ```bash
-> # Separate worker process (optional, recommended for production)
-> cd backend && npm run worker
-> ```
+> **Architecture note**: The API and worker are fully decoupled processes.
+> - The **API** (`npm run start`) is stateless and can be scaled horizontally.
+> - The **Worker** (`npm run worker`) runs as a single dedicated process consuming the BullMQ queue.
+>   It exposes its own health probe at `http://localhost:3002/health`.
 
 Open **http://localhost:3000**  
 Redis Commander (queue monitor): **http://localhost:8081**
@@ -300,7 +313,7 @@ Redis Commander (queue monitor): **http://localhost:8081**
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/health` | Health check |
+| `GET` | `/health` | Health check (verifies Redis + Supabase) |
 | `GET/POST` | `/api/users` | List users / create user (admin) |
 | `GET/PATCH/DELETE` | `/api/users/:id` | Get / update / delete user |
 | `POST` | `/api/users/:id/reset-password` | Reset user password (admin) |
@@ -348,14 +361,18 @@ After starting docker-compose, visit **http://localhost:8081** to monitor the Bu
 ## Development Scripts
 
 ```bash
-# Backend
-npm run start       # Production (API + embedded worker)
-npm run dev         # Development with nodemon
-npm run worker      # Standalone BullMQ worker
-npm run worker:dev  # Worker with nodemon
+# Backend — run both in separate terminals
+npm run start       # API server only (stateless, scalable)
+npm run dev         # API server with nodemon (dev)
+npm run worker      # BullMQ worker (standalone process)
+npm run worker:dev  # BullMQ worker with nodemon (dev)
 
 # Frontend
 npm run dev         # Next.js dev server (http://localhost:3000)
 npm run build       # Production build
 npm run lint        # ESLint
 ```
+
+> In development both API and worker can share the same machine.
+> In production, deploy them as **separate services** (e.g., two Railway services or two Render web services)
+> so the API can scale horizontally without duplicating workers.

@@ -5,6 +5,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { createServer } = require('http');
+const redisConnection = require('./config/redis');
+const supabase = require('./config/supabase');
 
 const jobsRouter = require('./routes/jobs');
 const resumesRouter = require('./routes/resumes');
@@ -19,8 +21,9 @@ const talentPoolRouter = require('./routes/talentPool');
 const submissionsRouter = require('./routes/submissions');
 const logger = require('./config/logger');
 
-// Start BullMQ worker in the same process as the API server
-require('./workers/resumeProcessor');
+// ── Worker is a SEPARATE process in production ────────────────────────────────
+// Run `npm run worker` in its own process/container.
+// This keeps the API stateless and horizontally scalable.
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -45,9 +48,37 @@ app.use(limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+// ── Health check — verifies Redis + Supabase connectivity ────────────────────
+// Used by load balancers, container orchestrators (k8s liveness probe), and uptime monitors.
+app.get('/health', async (req, res) => {
+  const checks = {};
+  let healthy = true;
+
+  // Redis ping
+  try {
+    await redisConnection.ping();
+    checks.redis = 'ok';
+  } catch (err) {
+    checks.redis = `error: ${err.message}`;
+    healthy = false;
+  }
+
+  // Supabase reachability
+  try {
+    const { error } = await supabase.from('users').select('id').limit(1);
+    if (error) throw error;
+    checks.supabase = 'ok';
+  } catch (err) {
+    checks.supabase = `error: ${err.message}`;
+    healthy = false;
+  }
+
+  const status = healthy ? 200 : 503;
+  res.status(status).json({
+    status: healthy ? 'ok' : 'degraded',
+    checks,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // Routes (existing)
