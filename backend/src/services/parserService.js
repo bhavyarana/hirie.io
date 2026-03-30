@@ -43,83 +43,37 @@ function wordCount(text) {
   return text.split(/\s+/).filter(Boolean).length;
 }
 
-// ─── Mistral Vision OCR (scanned PDF fallback) ───────────────────────────────
+// ─── Mistral OCR API fallback (scanned PDF) ──────────────────────────────────
 
 /**
- * Convert PDF pages to PNG images using pdf2pic and send each page to
- * Mistral's pixtral vision model for text extraction.
- * Used when standard pdf-parse yields < MIN_WORD_COUNT words.
+ * Send the raw PDF buffer directly to Mistral's dedicated OCR API
+ * (mistral-ocr-latest).  No native binaries, no image conversion, no
+ * per-page loops — a single HTTP call handles the whole document.
+ * Used only when pdf-parse yields < MIN_WORD_COUNT words.
  */
-async function extractWithMistralVision(buffer) {
+async function extractWithMistralOCR(buffer) {
   try {
-    logger.info('[Parser] Invoking Mistral Vision OCR for scanned PDF…');
-    const pdf2pic = require('pdf2pic');
+    logger.info('[Parser] Invoking Mistral OCR API for scanned PDF…');
 
-    const convert = pdf2pic.fromBuffer(buffer, {
-      density    : 200,
-      saveFilename: 'page',
-      savePath   : require('os').tmpdir(),
-      format     : 'png',
-      width      : 1800,
-      height     : 2400,
+    const base64Pdf = buffer.toString('base64');
+
+    const ocrResponse = await mistral.ocr.process({
+      model   : 'mistral-ocr-latest',
+      document: {
+        type       : 'document_url',
+        documentUrl: `data:application/pdf;base64,${base64Pdf}`,
+      },
     });
 
-    let pages;
-    try {
-      pages = await convert.bulk(-1, { responseType: 'buffer' });
-    } catch (convertErr) {
-      logger.warn('[Parser] pdf2pic convert failed:', convertErr.message);
-      return '';
-    }
+    // ocrResponse.pages → [{ index, markdown, … }, …]
+    const fullText = (ocrResponse.pages || [])
+      .map(p => p.markdown || '')
+      .join('\n\n');
 
-    if (!pages || pages.length === 0) {
-      logger.warn('[Parser] pdf2pic returned no pages');
-      return '';
-    }
-
-    let fullText = '';
-
-    for (const page of pages.slice(0, 5)) {
-      const imgBuffer = page.buffer || page;
-      if (!imgBuffer || !Buffer.isBuffer(imgBuffer)) continue;
-
-      const base64Img = imgBuffer.toString('base64');
-
-      try {
-        const response = await mistral.chat.complete({
-          model: 'pixtral-12b-2409',
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text:
-                    'This is a page from a resume. Extract ALL text exactly as it appears: ' +
-                    'name, address, phone, email, summary, experience, education, skills. ' +
-                    'Return ONLY the raw extracted text — no extra commentary.',
-                },
-                {
-                  type    : 'image_url',
-                  imageUrl: { url: `data:image/png;base64,${base64Img}` },
-                },
-              ],
-            },
-          ],
-          temperature: 0,
-        });
-
-        const pageText = response.choices[0]?.message?.content;
-        if (pageText) fullText += pageText + '\n\n';
-      } catch (visionErr) {
-        logger.warn('[Parser] Mistral Vision page error:', visionErr.message);
-      }
-    }
-
-    logger.info(`[Parser] Vision OCR extracted ${wordCount(fullText)} words`);
+    logger.info(`[Parser] Mistral OCR extracted ${wordCount(fullText)} words`);
     return fullText;
   } catch (err) {
-    logger.warn('[Parser] Mistral Vision OCR failed:', err.message);
+    logger.warn('[Parser] Mistral OCR failed:', err.message);
     return '';
   }
 }
@@ -186,13 +140,13 @@ async function extractResumeText(buffer, mimeType) {
     logger.info(`[Parser] pdf-parse extracted ${words} words`);
 
     if (words < MIN_WORD_COUNT) {
-      logger.info('[Parser] Sparse text — attempting Mistral Vision OCR fallback');
-      const visionText = await extractWithMistralVision(buffer);
-      if (wordCount(visionText) > words) {
-        logger.info('[Parser] Vision OCR produced better text — using it');
-        text = visionText;
+      logger.info('[Parser] Sparse text — attempting Mistral OCR API fallback');
+      const ocrText = await extractWithMistralOCR(buffer);
+      if (wordCount(ocrText) > words) {
+        logger.info('[Parser] Mistral OCR produced better text — using it');
+        text = ocrText;
       } else {
-        logger.warn('[Parser] Vision OCR did not improve text — keeping original');
+        logger.warn('[Parser] Mistral OCR did not improve text — keeping original');
       }
     }
   } else if (
