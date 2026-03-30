@@ -428,7 +428,13 @@ router.get('/by-team/:id', async (req, res) => {
         .from('candidates')
         .select('id, name, email, job_id, recruiter_id, created_at, resume_scores(score, status)')
         .in('id', candIds);
+      // Build a map from members; also fetch any recruiters not in the team
       const memberMap = Object.fromEntries(membersWithCounts.map(m => [m.id, m]));
+      const missingRecruiterIds = [...new Set((fullCands || []).map(c => c.recruiter_id).filter(rid => rid && !memberMap[rid]))];
+      if (missingRecruiterIds.length) {
+        const { data: extraUsers } = await supabase.from('users').select('id, name, email').in('id', missingRecruiterIds);
+        (extraUsers || []).forEach(u => { memberMap[u.id] = { id: u.id, name: u.name || u.email || u.id }; });
+      }
       enrichedCands = (fullCands || []).map(c => ({
         id: c.id,
         name: c.name || '(name pending)',
@@ -436,7 +442,7 @@ router.get('/by-team/:id', async (req, res) => {
         score: c.resume_scores?.[0]?.score ?? null,
         job_id: c.job_id,
         job_title: jobMap[c.job_id]?.title || '—',
-        recruiter_name: memberMap[c.recruiter_id]?.name || c.recruiter_id,
+        recruiter_name: memberMap[c.recruiter_id]?.name || '—',
         submitted_at: c.created_at,
       }));
     }
@@ -561,12 +567,18 @@ router.get('/by-job/:id', async (req, res) => {
         .select('id, name, email, recruiter_id, created_at, resume_scores(score, status)')
         .in('id', candIds);
       const rMap = Object.fromEntries(recruiterDetails.map(r => [r.id, r]));
+      // Fetch any recruiter not already in rMap
+      const missingRIds = [...new Set((fullCands || []).map(c => c.recruiter_id).filter(rid => rid && !rMap[rid]))];
+      if (missingRIds.length) {
+        const { data: extraUsers } = await supabase.from('users').select('id, name, email').in('id', missingRIds);
+        (extraUsers || []).forEach(u => { rMap[u.id] = { id: u.id, name: u.name || u.email || u.id }; });
+      }
       enrichedCands = (fullCands || []).map(c => ({
         id: c.id,
         name: c.name || '(name pending)',
         email: c.email,
         score: c.resume_scores?.[0]?.score ?? null,
-        recruiter_name: rMap[c.recruiter_id]?.name || c.recruiter_id,
+        recruiter_name: rMap[c.recruiter_id]?.name || '—',
         submitted_at: c.created_at,
       }));
     }
