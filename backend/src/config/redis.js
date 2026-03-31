@@ -1,14 +1,10 @@
 const { Redis } = require('ioredis');
 const logger = require('./logger');
 
-const connection = new Redis({
-  host    : process.env.REDIS_HOST || 'localhost',
-  port    : parseInt(process.env.REDIS_PORT || '6379'),
-  // Password — required for managed Redis providers (Upstash, Railway, Redis Cloud)
-  password: process.env.REDIS_PASSWORD || undefined,
-  // TLS — required for managed Redis over the internet
-  tls     : process.env.REDIS_TLS === 'true' ? {} : undefined,
-
+// Upstash TCP tab provides a single REDIS_URL (rediss://...)
+// The "rediss://" scheme automatically enables TLS.
+// Fall back to individual host/port/password for local dev.
+const redisOptions = {
   // BullMQ requirement: don't block on commands that must be retried
   maxRetriesPerRequest: null,
   enableReadyCheck    : false,
@@ -19,7 +15,17 @@ const connection = new Redis({
     logger.warn(`[Redis] Reconnecting (attempt ${times}), retry in ${delay}ms`);
     return delay;
   },
-});
+};
+
+const connection = process.env.REDIS_URL
+  ? new Redis(process.env.REDIS_URL, redisOptions)
+  : new Redis({
+      host    : process.env.REDIS_HOST || 'localhost',
+      port    : parseInt(process.env.REDIS_PORT || '6379'),
+      password: process.env.REDIS_PASSWORD || undefined,
+      tls     : process.env.REDIS_TLS === 'true' ? {} : undefined,
+      ...redisOptions,
+    });
 
 connection.on('connect', () => logger.info('[Redis] Connected'));
 connection.on('ready',   () => logger.info('[Redis] Ready'));
