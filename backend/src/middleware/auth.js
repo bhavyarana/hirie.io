@@ -79,7 +79,13 @@ async function getSupabaseUserWithRetry(token, maxRetries = 3) {
 async function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
 
+  // ── DEBUG (remove once production auth is confirmed working) ───────────────
+  logger.info(`[Auth] ${req.method} ${req.path} — header: ${
+    authHeader ? `present (Bearer ${authHeader.slice(7, 17)}…)` : 'MISSING'
+  }`);
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    logger.warn(`[Auth] 401 — no Bearer token on ${req.method} ${req.path}`);
     return res.status(401).json({ error: 'Missing or invalid authorization header' });
   }
 
@@ -95,6 +101,7 @@ async function authMiddleware(req, res, next) {
   }
 
   if (networkError) {
+    logger.warn(`[Auth] 503 — Supabase unreachable after retries on ${req.method} ${req.path}`);
     // Network issue — don't log the user out, let the client retry
     return res.status(503).json({
       error: 'Authentication service temporarily unavailable',
@@ -104,9 +111,11 @@ async function authMiddleware(req, res, next) {
   }
 
   if (!user) {
-    logger.warn('Auth failed: invalid or expired token');
+    logger.warn(`[Auth] 401 — invalid/expired token on ${req.method} ${req.path}`);
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
+
+  logger.info(`[Auth] Token valid — user ${user.id} (${user.email})`);
 
   // ── Step 2: Fetch role from DB ─────────────────────────────────────────────
   try {
