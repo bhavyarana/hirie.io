@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
-  allowedDevOrigins: ["*"]
+  allowedDevOrigins: ["https://hirie-io.vercel.app", "http://localhost:3000"]
 };
 
 export default nextConfig;
