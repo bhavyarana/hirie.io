@@ -28,14 +28,34 @@ const YEARS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - i);
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function SkillChip({ label }: { label: string }) {
+// ─── Highlight helper (matches jobs page style) ──────────────────────────────────────────
+
+function Highlight({ text, query }: { text: string; query: string }) {
+  if (!query.trim()) return <>{text}</>;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark style={{
+        background: 'rgba(99,102,241,0.3)', color: 'var(--text-primary)',
+        borderRadius: '2px', padding: '0 1px',
+      }}>
+        {text.slice(idx, idx + query.length)}
+      </mark>
+      {text.slice(idx + query.length)}
+    </>
+  );
+}
+
+function SkillChip({ label, query }: { label: string; query?: string }) {
   return (
     <span style={{
       padding: '0.18rem 0.55rem', borderRadius: '4px', fontSize: '0.69rem', fontWeight: 500,
       background: 'rgba(99,102,241,0.12)', color: '#a5b4fc',
       border: '1px solid rgba(99,102,241,0.22)', whiteSpace: 'nowrap',
     }}>
-      {label}
+      {query ? <Highlight text={label} query={query} /> : label}
     </span>
   );
 }
@@ -54,7 +74,7 @@ function Avatar({ name, email }: { name: string | null; email: string | null }) 
   );
 }
 
-function CandidateCard({ c }: { c: TalentPoolCandidate }) {
+function CandidateCard({ c, query, locationQuery }: { c: TalentPoolCandidate; query?: string; locationQuery?: string }) {
   const topSkills = (c.extracted_skills || []).slice(0, 5);
   const topTitles = (c.extracted_titles || []).slice(0, 2);
   const since = new Date(c.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -80,11 +100,16 @@ function CandidateCard({ c }: { c: TalentPoolCandidate }) {
         <Avatar name={c.name} email={c.email} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: '0.925rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {c.name || '(Name Pending)'}
+            {query ? <Highlight text={c.name || '(Name Pending)'} query={query} /> : (c.name || '(Name Pending)')}
           </p>
           {topTitles.length > 0 && (
             <p style={{ color: '#6366f1', fontSize: '0.77rem', fontWeight: 500, marginTop: '0.1rem' }}>
-              {topTitles.join(' · ')}
+              {topTitles.map((t, i) => (
+                <span key={t}>
+                  {i > 0 && ' · '}
+                  {query ? <Highlight text={t} query={query} /> : t}
+                </span>
+              ))}
             </p>
           )}
           <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.3rem', flexWrap: 'wrap' }}>
@@ -92,10 +117,14 @@ function CandidateCard({ c }: { c: TalentPoolCandidate }) {
               <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>⏱ {c.experience_years}yr exp</span>
             )}
             {c.current_location && (
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>📍 {c.current_location}</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                📍 {locationQuery ? <Highlight text={c.current_location} query={locationQuery} /> : c.current_location}
+              </span>
             )}
             {c.first_seen_job_title && (
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>💼 {c.first_seen_job_title}</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                💼 {query ? <Highlight text={c.first_seen_job_title} query={query} /> : c.first_seen_job_title}
+              </span>
             )}
           </div>
         </div>
@@ -104,7 +133,7 @@ function CandidateCard({ c }: { c: TalentPoolCandidate }) {
       {/* Skills */}
       {topSkills.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-          {topSkills.map(s => <SkillChip key={s} label={s} />)}
+          {topSkills.map(s => <SkillChip key={s} label={s} query={query} />)}
           {c.extracted_skills.length > 5 && (
             <span style={{ color: '#475569', fontSize: '0.7rem', alignSelf: 'center' }}>+{c.extracted_skills.length - 5} more</span>
           )}
@@ -366,7 +395,7 @@ export default function TalentPoolPage() {
           gap: '1rem',
           marginBottom: '1.5rem',
         }}>
-          {candidates.map(c => <CandidateCard key={c.id} c={c} />)}
+          {candidates.map(c => <CandidateCard key={c.id} c={c} query={debouncedQuery || undefined} locationQuery={debouncedLocation || undefined} />)}
         </div>
       )}
 

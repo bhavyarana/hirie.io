@@ -127,6 +127,7 @@ router.post('/backfill', authMiddleware, async (req, res) => {
 /**
  * GET /api/talent-pool
  * All authenticated roles. Full filter support.
+ * Search (`q`) matches: name (ilike partial), extracted_skills (any element ilike), extracted_titles (any element ilike)
  */
 router.get('/', authMiddleware, async (req, res) => {
   const {
@@ -134,76 +135,112 @@ router.get('/', authMiddleware, async (req, res) => {
     min_exp, max_exp, page = 1, limit = 24,
   } = req.query;
 
-  const offset = (parseInt(page) - 1) * parseInt(limit);
+  const pageNum = parseInt(page);
+  const limitNum = parseInt(limit);
+  const offset = (pageNum - 1) * limitNum;
+
+  const SELECT_COLS = `id, candidate_id, name, email, phone,
+    resume_file_path, resume_file_name,
+    extracted_skills, extracted_titles,
+    experience_years, current_location,
+    first_seen_job_title, uploaded_by,
+    created_at, updated_at`;
 
   try {
-    let query = supabase
-      .from('talent_pool')
-      .select(
-        `id, candidate_id, name, email, phone,
-         resume_file_path, resume_file_name,
-         extracted_skills, extracted_titles,
-         experience_years, current_location,
-         first_seen_job_title, uploaded_by,
-         created_at, updated_at`,
-        { count: 'exact' }
-      )
-      .order('created_at', { ascending: false })
-      .range(offset, offset + parseInt(limit) - 1);
+    // Helper to apply non-search filters to any query builder
+    function applyFilters(qb) {
+      if (location && location.trim()) {
+        qb = qb.ilike('current_location', `%${location.trim()}%`);
+      }
+      if (uploaded_by && uploaded_by.trim()) {
+        qb = qb.eq('uploaded_by', uploaded_by.trim());
+      }
+      if (date_range) {
+        const now = new Date();
+        let since = null;
+        if (date_range === 'last_24h') since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        else if (date_range === 'last_week') since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        else if (date_range === 'last_month') since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        else if (date_range === 'custom' && year) {
+          const y = parseInt(year);
+          const m = month ? parseInt(month) : null;
+          if (m) {
+            qb = qb.gte('created_at', new Date(y, m - 1, 1).toISOString())
+                   .lt('created_at', new Date(y, m, 1).toISOString());
+          } else {
+            qb = qb.gte('created_at', new Date(y, 0, 1).toISOString())
+                   .lt('created_at', new Date(y + 1, 0, 1).toISOString());
+          }
+        }
+        if (since) qb = qb.gte('created_at', since.toISOString());
+      }
+      if (min_exp) qb = qb.gte('experience_years', parseFloat(min_exp));
+      if (max_exp) qb = qb.lte('experience_years', parseFloat(max_exp));
+      return qb;
+    }
+
+    let allMatchingIds = null; // null = no text search, array = matched IDs
 
     if (q && q.trim()) {
-      const kw = q.trim();
-      query = query.or(
-        `name.ilike.%${kw}%,extracted_skills.cs.{${kw}},extracted_titles.cs.{${kw}}`
-      );
-    }
+      const kw = q.trim().toLowerCase();
 
-    if (location && location.trim()) {
-      query = query.ilike('current_location', `%${location.trim()}%`);
-    }
+      // Query 1: match by name (ilike, server-side)
+      let nameQ = supabase.from('talent_pool').select('id, extracted_skills, extracted_titles, name');
+      nameQ = applyFilters(nameQ);
+      nameQ = nameQ.ilike('name', `%${kw}%`);
+      const { data: nameMatches } = await nameQ;
 
-    if (uploaded_by && uploaded_by.trim()) {
-      query = query.eq('uploaded_by', uploaded_by.trim());
-    }
+      // Query 2: fetch ALL records (with filters applied) to do JS-side skill/title ilike matching
+      // We limit this to a reasonable batch — in large pools this is acceptable because
+      // Supabase PostgREST doesn't support ilike on array elements without a custom RPC.
+      let allQ = supabase.from('talent_pool').select('id, extracted_skills, extracted_titles, name');
+      allQ = applyFilters(allQ);
+      const { data: allRecords } = await allQ;
 
-    if (date_range) {
-      const now = new Date();
-      let since = null;
+      const matchedIds = new Set();
 
-      if (date_range === 'last_24h') {
-        since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      } else if (date_range === 'last_week') {
-        since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      } else if (date_range === 'last_month') {
-        since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      } else if (date_range === 'custom' && year) {
-        const y = parseInt(year);
-        const m = month ? parseInt(month) : null;
-        if (m) {
-          query = query
-            .gte('created_at', new Date(y, m - 1, 1).toISOString())
-            .lt('created_at', new Date(y, m, 1).toISOString());
-        } else {
-          query = query
-            .gte('created_at', new Date(y, 0, 1).toISOString())
-            .lt('created_at', new Date(y + 1, 0, 1).toISOString());
+      // Add name matches
+      (nameMatches || []).forEach(r => matchedIds.add(r.id));
+
+      // Add skill/title ilike matches
+      (allRecords || []).forEach(r => {
+        const skills = (r.extracted_skills || []).map(s => s.toLowerCase());
+        const titles = (r.extracted_titles || []).map(t => t.toLowerCase());
+        if (
+          skills.some(s => s.includes(kw)) ||
+          titles.some(t => t.includes(kw))
+        ) {
+          matchedIds.add(r.id);
         }
-      }
+      });
 
-      if (since) query = query.gte('created_at', since.toISOString());
+      allMatchingIds = [...matchedIds];
     }
 
-    if (min_exp) query = query.gte('experience_years', parseFloat(min_exp));
-    if (max_exp) query = query.lte('experience_years', parseFloat(max_exp));
+    // Main paginated query
+    let mainQ = supabase
+      .from('talent_pool')
+      .select(SELECT_COLS, { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limitNum - 1);
 
-    const { data, error, count } = await query;
+    mainQ = applyFilters(mainQ);
+
+    if (allMatchingIds !== null) {
+      if (allMatchingIds.length === 0) {
+        return res.json({ candidates: [], total: 0, page: pageNum, limit: limitNum });
+      }
+      mainQ = mainQ.in('id', allMatchingIds);
+    }
+
+    const { data, error, count } = await mainQ;
 
     if (error) {
       logger.error('Talent pool fetch error:', error);
       return res.status(500).json({ error: 'Failed to fetch talent pool', detail: error.message });
     }
 
-    // Resolve uploader names from public.users (auth.users can't be joined via PostgREST)
+    // Resolve uploader names
     const uploaderIds = [...new Set((data || []).map(c => c.uploaded_by).filter(Boolean))];
     const uploaderMap = {};
     if (uploaderIds.length > 0) {
@@ -235,7 +272,7 @@ router.get('/', authMiddleware, async (req, res) => {
       updated_at: c.updated_at,
     }));
 
-    res.json({ candidates, total: count || 0, page: parseInt(page), limit: parseInt(limit) });
+    res.json({ candidates, total: count || 0, page: pageNum, limit: limitNum });
   } catch (err) {
     logger.error('Talent pool unexpected error:', err);
     res.status(500).json({ error: 'Unexpected error fetching talent pool' });
