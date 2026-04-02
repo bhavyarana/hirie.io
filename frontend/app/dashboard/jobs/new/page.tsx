@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDropzone } from 'react-dropzone';
-import { jobsApi, teamsApi, parseJdFile, type CreateJobData, type ParsedJD, type ScoringCriteria } from '@/lib/api';
+import { jobsApi, teamsApi, parseJdFile, parseJdText, type CreateJobData, type ParsedJD, type ScoringCriteria } from '@/lib/api';
 import { useUserContext } from '@/lib/context/UserContext';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -24,6 +24,8 @@ export default function NewJobPage() {
   const [skillInput, setSkillInput] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const [showPdfUpload, setShowPdfUpload] = useState(false);
+  const [showTextPaste, setShowTextPaste] = useState(false);
+  const [rawJdText, setRawJdText] = useState('');
   const [aiWarning, setAiWarning] = useState<string | null>(null);
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -96,6 +98,39 @@ export default function NewJobPage() {
       setIsParsing(false);
     }
   }, []);
+
+  // Raw text → AI parse → auto-fill form
+  const handleTextParse = async () => {
+    if (rawJdText.trim().length < 50) {
+      toast.error('Please paste at least 50 characters of job description text.');
+      return;
+    }
+    setIsParsing(true);
+    setAiWarning(null);
+    try {
+      toast.loading('🤖 Parsing JD with AI…', { id: 'parse-jd-text' });
+      const parsed: ParsedJD & { ai_available?: boolean; ai_error?: string } = await parseJdText(rawJdText);
+      setForm({
+        job_title: parsed.job_title || '',
+        company_name: parsed.company_name || '',
+        job_description_text: parsed.job_description_text || '',
+        required_skills: Array.isArray(parsed.required_skills) ? parsed.required_skills : [],
+      });
+      setShowTextPaste(false);
+      setRawJdText('');
+      if (parsed.ai_available === false && parsed.ai_error) {
+        setAiWarning(parsed.ai_error);
+        toast.warning('⚠️ Description pre-filled. AI parsing unavailable — see warning below.', { id: 'parse-jd-text', duration: 5000 });
+      } else {
+        toast.success(`✨ Auto-filled! Extracted ${parsed.required_skills?.length ?? 0} skills. Review and click Create Job.`, { id: 'parse-jd-text', duration: 4000 });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to parse JD';
+      toast.error(msg, { id: 'parse-jd-text' });
+    } finally {
+      setIsParsing(false);
+    }
+  };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -225,6 +260,104 @@ export default function NewJobPage() {
                   }}>Choose File</span>
                 </>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Raw Text Paste Banner */}
+        <div style={{
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
+          borderRadius: '1rem', padding: '1.25rem 1.5rem', marginBottom: '1rem',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <div>
+            <p style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.125rem' }}>
+              📋 Paste JD Text — AI Auto-fill
+            </p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+              Skip the PDF step — paste raw text and let AI fill all fields
+            </p>
+          </div>
+          <button type="button" onClick={() => { setShowTextPaste(v => !v); setShowPdfUpload(false); }} style={{
+            padding: '0.5rem 1rem', borderRadius: '0.5rem', cursor: 'pointer',
+            fontSize: '0.8rem', fontWeight: 600, border: 'none',
+            background: showTextPaste ? 'rgba(6,182,212,0.15)' : 'linear-gradient(135deg,#06b6d4,#6366f1)',
+            color: showTextPaste ? '#67e8f9' : '#fff',
+            transition: 'all 0.2s',
+          }}>
+            {showTextPaste ? '▲ Close' : '📋 Paste Text'}
+          </button>
+        </div>
+
+        {/* Raw Text Paste Panel (collapsible) */}
+        {showTextPaste && (
+          <div style={{
+            background: 'var(--bg-card)', border: '1px solid rgba(6,182,212,0.25)',
+            borderRadius: '1rem', padding: '1.5rem', marginBottom: '1rem',
+            position: 'relative', overflow: 'hidden',
+          }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2px', background: 'linear-gradient(90deg, #06b6d4, #6366f1)' }} />
+            <label style={{ display: 'block', color: 'var(--text-secondary)', fontSize: '0.875rem', fontWeight: 500, marginBottom: '0.5rem' }}>
+              Paste your Job Description
+            </label>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginBottom: '0.75rem' }}>
+              Copy &amp; paste the full job description text. AI will extract the title, company, description, and skills automatically.
+            </p>
+            <textarea
+              value={rawJdText}
+              onChange={e => setRawJdText(e.target.value)}
+              disabled={isParsing}
+              placeholder={`Paste the full JD here…
+
+Example:
+Senior Frontend Engineer at Acme Inc.
+
+We are looking for a skilled engineer to join our team...
+
+Requirements:
+• 5+ years React experience
+• TypeScript proficiency
+• ...`}
+              style={{
+                width: '100%', minHeight: '200px', padding: '0.875rem 1rem',
+                background: 'var(--bg-base)', border: '1px solid rgba(6,182,212,0.3)',
+                borderRadius: '0.625rem', color: 'var(--text-primary)', fontSize: '0.875rem',
+                resize: 'vertical', outline: 'none', lineHeight: 1.6,
+                boxSizing: 'border-box', opacity: isParsing ? 0.5 : 1,
+                transition: 'border-color 0.2s',
+              }}
+              onFocus={e => (e.target.style.borderColor = '#06b6d4')}
+              onBlur={e => (e.target.style.borderColor = 'rgba(6,182,212,0.3)')}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.875rem' }}>
+              <span style={{ color: 'var(--text-faint)', fontSize: '0.75rem' }}>
+                {rawJdText.trim().length} characters {rawJdText.trim().length < 50 && rawJdText.length > 0 ? '(need 50+)' : ''}
+              </span>
+              <div style={{ display: 'flex', gap: '0.625rem' }}>
+                <button type="button" onClick={() => setRawJdText('')} disabled={!rawJdText || isParsing}
+                  style={{
+                    padding: '0.5rem 1rem', borderRadius: '0.5rem', fontSize: '0.8rem',
+                    background: 'none', border: '1px solid var(--border)', color: 'var(--text-muted)',
+                    cursor: rawJdText && !isParsing ? 'pointer' : 'not-allowed',
+                    opacity: !rawJdText || isParsing ? 0.4 : 1,
+                  }}>
+                  Clear
+                </button>
+                <button type="button" onClick={handleTextParse}
+                  disabled={rawJdText.trim().length < 50 || isParsing}
+                  style={{
+                    padding: '0.5rem 1.25rem', borderRadius: '0.5rem', fontSize: '0.8rem', fontWeight: 600, border: 'none',
+                    background: rawJdText.trim().length >= 50 && !isParsing
+                      ? 'linear-gradient(135deg, #06b6d4, #6366f1)'
+                      : 'rgba(6,182,212,0.15)',
+                    color: rawJdText.trim().length >= 50 && !isParsing ? '#fff' : '#67e8f9',
+                    cursor: rawJdText.trim().length >= 50 && !isParsing ? 'pointer' : 'not-allowed',
+                    boxShadow: rawJdText.trim().length >= 50 && !isParsing ? '0 0 16px rgba(6,182,212,0.3)' : 'none',
+                    transition: 'all 0.2s',
+                  }}>
+                  {isParsing ? '🤖 Parsing…' : '✨ Parse with AI'}
+                </button>
+              </div>
             </div>
           </div>
         )}

@@ -329,6 +329,28 @@ export async function parseJdFile(file: File): Promise<ParsedJD> {
   return res.json();
 }
 
+// ─── Parse JD from raw text ──────────────────────────────────────────────────
+export async function parseJdText(text: string): Promise<ParsedJD> {
+  const supabase = createClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('Not authenticated');
+
+  const res = await fetch(`${API_URL}/api/parse-jd/text`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ text }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || 'JD text parsing failed');
+  }
+  return res.json();
+}
+
 // ─── Export CSV ─────────────────────────────────────────────────────────────
 export async function exportCSV(jobId: string, jobTitle: string) {
   const supabase = createClient();
